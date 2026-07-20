@@ -516,8 +516,9 @@ function buildDronePanel(){
       <div class="ds-row"><label>Energy Boost%</label><input type="number" value="${d.energyBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].energyBoost=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>Normal Atk Boost%</label><input type="number" value="${d.naBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].naBoost=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>Skill Boost%</label><input type="number" value="${d.skillBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].skillBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Skill Mult%</label><input type="number" value="${d.skMult||0}" step="1" title="Drone skill multiplier (e.g. 300 for SR max evolve)" oninput="ATK_DB['${currentAtk}'].drones[${i}].skMult=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>ETR%</label><input type="number" value="${d.etr||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].etr=+this.value;scheduleWrite()"></div>
-      <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].tr=+this.value;scheduleWrite()"></div>
+      <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].tr=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>Resistance Boost%</label><input type="number" value="${d.resistBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].resistBoost=+this.value;render();scheduleWrite()"></div>
     </div>`;
   }).join('');
@@ -526,9 +527,9 @@ function buildDronePanel(){
   document.getElementById('droneBody').innerHTML=
     `<div class="drone-grid">${slots}</div>
      <div class="drone-formula">
-       <strong>DroneNAIR</strong> = total Drone Dmg Boost (<strong>${totalBoost}%</strong>) − enemy Resistance Boost + Physical/Energy/Normal Atk Boost of slot<br>
-       <strong>DroneSKIR</strong> = total Drone Dmg Boost (<strong>${totalBoost}%</strong>) − enemy Resistance Boost + Skill Boost of slot<br>
-       <strong>DroneED</strong> = (100 + your Enh − enemy Dec) / 100, clamped [1.0, 2.0]
+       <strong>NA col</strong> = TR × F((IR + DroneNAIR) / 100) &nbsp;|&nbsp; TR = 1 + TR%/100 &nbsp;|&nbsp; DroneNAIR = Σ DmgBoost (<strong>${totalBoost}%</strong>) − Σ EnemyResist + Phys/Energy/NA Boost<br>
+       <strong>SK col</strong> = SkMult% / 100 × F((IR + DroneSKIR) / 100) &nbsp;|&nbsp; DroneSKIR = Σ DmgBoost − Σ EnemyResist + Skill Boost &nbsp;(SK col shows raw IR mult if SkMult not set)<br>
+       <strong>DroneED</strong> = (100 + your Enh + ETR% − enemy Dec) / 100, clamped [1.0, 2.0] &nbsp;|&nbsp; <strong>IR</strong> = pvp_inc + dmg_inc − pvp_red − dmg_red
      </div>`;
 }
 
@@ -572,8 +573,9 @@ function buildExpandRow(ei){
       <div class="ds-row"><label>Energy Boost%</label><input type="number" value="${d.energyBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].energyBoost=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>Normal Atk Boost%</label><input type="number" value="${d.naBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].naBoost=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>Skill Boost%</label><input type="number" value="${d.skillBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].skillBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Skill Mult%</label><input type="number" value="${d.skMult||0}" step="1" title="Drone skill multiplier (e.g. 300 for SR max evolve)" oninput="ENEMIES[${ei}].drones[${di}].skMult=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>ETR%</label><input type="number" value="${d.etr||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].etr=+this.value;scheduleWrite()"></div>
-      <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].tr=+this.value;scheduleWrite()"></div>
+      <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].tr=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>Resistance Boost%</label><input type="number" value="${d.resistBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].resistBoost=+this.value;render();scheduleWrite()"></div>
     </div>`;
   }).join('');
@@ -658,11 +660,15 @@ function render(){
     const slots=atk.drones.map(d=>{
       const ek=enhKey(d), dk=decKey(d);
       const ed=droneED((atk[ek]||0)+(d.etr||0),e[dk]);
-      const baseIR=atk.pvp_inc-e.pvp_red;
+      const baseIR=(atk.pvp_inc||0)+(atk.dmg_inc||0)-(e.pvp_red||0)-(e.dmg_red||0);
       const nairExtra=(wpType==='phys'?(d.physBoost||0):(d.energyBoost||0))+(d.naBoost||0);
       const naIR=F((baseIR+totalDmgBoost-enemyResist+nairExtra)/100);
       const skIR=F((baseIR+totalDmgBoost-enemyResist+(d.skillBoost||0))/100);
-      return {ed,naIR,skIR};
+      const tr=1+(d.tr||0)/100;
+      const sm=(d.skMult||0)/100;
+      const na=tr*naIR;
+      const sk=sm>0?sm*skIR:skIR;
+      return {ed,na,sk,hasSkMult:sm>0};
     });
 
     // TTK: your kills on them
@@ -701,8 +707,8 @@ function render(){
     const expanded=expandedEnemy===ei;
     const droneCols=slots.map(s=>`
       <td style="border-left:1px solid var(--border)" class="${s.ed==null?'':colorM(s.ed,[1.3,1.1,1.0])}">${fmtNull(s.ed)}</td>
-      <td class="${colorM(s.naIR)}">${s.naIR.toFixed(3)}</td>
-      <td class="${colorM(s.skIR)}">${s.skIR.toFixed(3)}</td>`).join('');
+      <td class="${colorM(s.na)}">${s.na.toFixed(3)}</td>
+      <td class="${colorM(s.sk)}" title="${s.hasSkMult?'SK×SkMult':'SK (SkMult not set)'}">${s.sk.toFixed(3)}</td>`).join('');
 
     // TTK columns
     const myTTKw=myKillRate&&maxMyKR?Math.round((myKillRate/maxMyKR)*100):0;
