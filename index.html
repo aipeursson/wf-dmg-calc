@@ -582,6 +582,12 @@ function buildExpandRow(ei){
         <input value="${e.name??''}" placeholder="Player name"
           oninput="ENEMIES[${ei}].name=this.value;render();scheduleWrite()">
       </div>
+      <div class="sf" style="flex:0 0 100px">
+        <label>BP</label>
+        <input type="number" value="${e.bp??''}" placeholder="0" step="1"
+          oninput="ENEMIES[${ei}].bp=parseFloat(this.value)||0;scheduleWrite();"
+          onchange="render();">
+      </div>
     </div>`;
 
   return `<tr class="expand-row" id="expand-${ei}"><td colspan="23">
