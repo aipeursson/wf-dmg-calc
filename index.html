@@ -296,6 +296,12 @@ const ENEMIES = [
 let currentAtk = 'jackclown';
 let expandedEnemy = null;
 
+function nextInput(el){
+  const inputs=[...document.querySelectorAll('input[type="number"],.num,input:not([type="checkbox"]),.sf input')];
+  const i=inputs.indexOf(el);
+  if(i>=0&&i<inputs.length-1)inputs[i+1].focus();
+}
+
 // ═══════════════════════════════════════
 //  FORMULAS
 // ═══════════════════════════════════════
@@ -482,6 +488,7 @@ function buildAtkPanel(){
     const miss=ATK_REQUIRED.includes(k)&&(a[k]===0||a[k]==null);
     return `<div class="sf"><label>${lbl}</label>
       <input class="num${miss?' miss':''}" value="${a[k]??0}" step="0.01"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();nextInput(this);}"
         oninput="ATK_DB['${currentAtk}']['${k}']=parseFloat(this.value)||0;render();scheduleWrite()">
     </div>`;
   }).join('');
@@ -546,6 +553,7 @@ function buildExpandRow(ei){
   const grid=ENEMY_FIELDS.map(([k,lbl])=>`<div class="sf">
     <label>${lbl}</label>
     <input class="num" value="${e[k]??''}" placeholder="?" step="0.01"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();nextInput(this);}"
       oninput="ENEMIES[${ei}]['${k}']=parseFloat(this.value)||null;render();scheduleWrite()">
   </div>`).join('');
 
