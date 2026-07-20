@@ -206,6 +206,8 @@ tr:hover td{background:var(--bg3);}
           <th rowspan="2" title="(100+sentinel_enh−sentinel_dec)/100">Sent</th>
           <th rowspan="2" title="max(0,(100+heal_enh−heal_dec)/100)">Heal</th>
           <th rowspan="2" title="(Hit/80)×CritF×DBD×PvP×Area×FID — relative">DPS</th>
+          <th rowspan="2" title="enemy HP ÷ (DPS × your TAA) — green = fast kill">TTK↓</th>
+          <th rowspan="2" title="your HP ÷ (enemy DPS × enemy TAA) — green = they kill you slowly">TTK↑</th>
         </tr>
         <tr>
           <th title="(100+enh−dec)/100 clamped [1,2]" style="border-left:1px solid var(--border)">ED</th>
@@ -458,6 +460,7 @@ function loadAttacker(name){
 //  ATTACKER STAT INPUTS
 // ═══════════════════════════════════════
 const ATK_FIELDS=[
+  ['mg_atk','MG Attack'],['wg_atk','WG Attack'],['ms_atk','MS Attack'],['hp','HP'],
   ['hit','Hit Rate'],['crit','Crit Rate'],['pdb','Phys Dmg Break'],['pd','Phys Defense'],
   ['edb','Energy Dmg Break'],['ed','Energy Defense'],
   ['pvp_inc','PvP Inc %'],['pvp_red','PvP Red %'],
@@ -527,6 +530,7 @@ const ENEMY_FIELDS=[
   ['pvp_red','PvP Red %'],['aerial_red','Aerial Red %'],['ground_red','Ground Red %'],
   ['pdb','Phys Dmg Break'],['pd','Phys Defense'],['edb','Eng Dmg Break'],['ed','Eng Defense'],
   ['sentinel_enh','Sentinel Enh %'],['sentinel_dec','Sentinel Dec %'],['heal_dec','Heal Dec %'],
+  ['hp','HP'],['mg_atk','MG Attack'],['wg_atk','WG Attack'],['ms_atk','MS Attack'],
   ['hit','Hit Rate'],['crit','Crit Rate'],['pvp_inc','PvP Inc %'],
   ['aerial_inc','Aerial Inc %'],['ground_inc','Ground Inc %'],
 ];
@@ -564,7 +568,7 @@ function buildExpandRow(ei){
       </div>
     </div>`;
 
-  return `<tr class="expand-row" id="expand-${ei}"><td colspan="21">
+  return `<tr class="expand-row" id="expand-${ei}"><td colspan="23">
     <div class="expand-body">
       ${identity}
       <div class="expand-grid">${grid}</div>
@@ -631,15 +635,38 @@ function render(){
       return {ed,naIR,skIR};
     });
 
-    return {e,ei,hit,cp,cf,dbd,ir,area,fm,slots,sed,hed,dps};
+    // TTK: your kills on them
+    const atkTAA=(atk.mg_atk||0)+(atk.wg_atk||0)+(atk.ms_atk||0);
+    const myKillRate=(e.hp&&atkTAA)?dps*atkTAA/e.hp:null;
+
+    // TTK: their DPS against you
+    const hasEO=e.hit!=null&&e.crit!=null&&e.pvp_inc!=null;
+    let theirKillRate=null;
+    if(hasEO){
+      const eHit=hitPct(e.hit,atk.dodge);
+      const eCp=critPct(e.crit,atk.crit_res);
+      const eCf=1+(eCp/100)*(critMul/100-1);
+      const eDbd=wpType==='phys'?F(((e.pdb||0)-(atk.pd||0))/1000):F(((e.edb||e.pdb||0)-(atk.ed||0))/1000);
+      const eIr=F(((e.pvp_inc||0)-(atk.pvp_red||0))/100);
+      const eArea=enemyType==='aerial'?F(((e.aerial_inc||0)-(atk.aerial_red||0))/100):
+                  enemyType==='ground'?F(((e.ground_inc||0)-(atk.ground_red||0))/100):1;
+      const eFm=fidM(0,atk.fid_dec||0);
+      const eDps=(eHit/80)*eCf*eDbd*eIr*eArea*eFm;
+      const eTAA=(e.mg_atk||0)+(e.wg_atk||0)+(e.ms_atk||0);
+      if(atk.hp&&eTAA) theirKillRate=eDps*eTAA/atk.hp;
+    }
+
+    return {e,ei,hit,cp,cf,dbd,ir,area,fm,slots,sed,hed,dps,myKillRate,theirKillRate};
   });
 
   rows.sort((a,b)=>b.dps-a.dps);
   const maxDps=Math.max(...rows.map(r=>r.dps));
+  const maxMyKR=Math.max(...rows.map(r=>r.myKillRate||0));
+  const maxTheirKR=Math.max(...rows.map(r=>r.theirKillRate||0));
 
   let html='';
   for(const r of rows){
-    const {e,ei,hit,cp,cf,dbd,ir,area,fm,slots,sed,hed,dps}=r;
+    const {e,ei,hit,cp,cf,dbd,ir,area,fm,slots,sed,hed,dps,myKillRate,theirKillRate}=r;
     const bw=Math.round((dps/maxDps)*100);
     const dc=dps/maxDps>=0.8?'good':dps/maxDps>=0.6?'ok':dps/maxDps>=0.4?'bad':'vbad';
     const expanded=expandedEnemy===ei;
@@ -647,6 +674,20 @@ function render(){
       <td style="border-left:1px solid var(--border)" class="${s.ed==null?'':colorM(s.ed,[1.3,1.1,1.0])}">${fmtNull(s.ed)}</td>
       <td class="${colorM(s.naIR)}">${s.naIR.toFixed(3)}</td>
       <td class="${colorM(s.skIR)}">${s.skIR.toFixed(3)}</td>`).join('');
+
+    // TTK columns
+    const myTTKw=myKillRate&&maxMyKR?Math.round((myKillRate/maxMyKR)*100):0;
+    const myTTKc=myKillRate?(myKillRate/maxMyKR>=0.8?'good':myKillRate/maxMyKR>=0.6?'ok':myKillRate/maxMyKR>=0.4?'bad':'vbad'):'';
+    const theirTTKw=theirKillRate&&maxTheirKR?Math.round((theirKillRate/maxTheirKR)*100):0;
+    // for "their TTK on you": higher kill rate = worse for you → invert color
+    const theirTTKc=theirKillRate?(theirKillRate/maxTheirKR>=0.8?'vbad':theirKillRate/maxTheirKR>=0.6?'bad':theirKillRate/maxTheirKR>=0.4?'ok':'good'):'';
+    const myTTKcell=myKillRate
+      ?`<td class="bar-cell ${myTTKc}"><div class="bar-bg" style="width:${myTTKw}%"></div><span class="bar-val">${(1/myKillRate).toFixed(1)}s</span></td>`
+      :`<td style="color:var(--muted);text-align:center">—</td>`;
+    const theirTTKcell=theirKillRate
+      ?`<td class="bar-cell ${theirTTKc}"><div class="bar-bg" style="width:${theirTTKw}%"></div><span class="bar-val">${(1/theirKillRate).toFixed(1)}s</span></td>`
+      :`<td style="color:var(--muted);text-align:center">${hasEO?'—':'?'}</td>`;
+
     html+=`<tr>
       <td class="name-cell" onclick="toggleExpand(${ei})">${expanded?'▼ ':'▶ '}${e.label?`<span style="color:var(--accent);font-size:10px;margin-right:4px">${e.label}</span>`:''}${e.name}</td>
       <td style="color:var(--muted)">${(e.bp/1e6).toFixed(2)}M</td>
@@ -664,6 +705,8 @@ function render(){
         <div class="bar-bg" style="width:${bw}%"></div>
         <span class="bar-val">${(dps*100).toFixed(1)}</span>
       </td>
+      ${myTTKcell}
+      ${theirTTKcell}
     </tr>`;
     if(expanded) html+=buildExpandRow(ei);
   }
