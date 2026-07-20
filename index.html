@@ -488,8 +488,9 @@ function buildAtkPanel(){
     const miss=ATK_REQUIRED.includes(k)&&(a[k]===0||a[k]==null);
     return `<div class="sf"><label>${lbl}</label>
       <input class="num${miss?' miss':''}" value="${a[k]??0}" step="0.01"
-        onkeydown="if(event.key==='Enter'){event.preventDefault();nextInput(this);}"
-        oninput="ATK_DB['${currentAtk}']['${k}']=parseFloat(this.value)||0;render();scheduleWrite()">
+        onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();nextInput(this);}"
+        oninput="ATK_DB['${currentAtk}']['${k}']=parseFloat(this.value)||0;scheduleWrite();"
+        onchange="render();">
     </div>`;
   }).join('');
   document.getElementById('atkBody').innerHTML=`<div class="stat-grid">${fields}</div>`;
@@ -553,8 +554,9 @@ function buildExpandRow(ei){
   const grid=ENEMY_FIELDS.map(([k,lbl])=>`<div class="sf">
     <label>${lbl}</label>
     <input class="num" value="${e[k]??''}" placeholder="?" step="0.01"
-      onkeydown="if(event.key==='Enter'){event.preventDefault();nextInput(this);}"
-      oninput="ENEMIES[${ei}]['${k}']=parseFloat(this.value)||null;render();scheduleWrite()">
+      onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();nextInput(this);}"
+      oninput="ENEMIES[${ei}]['${k}']=parseFloat(this.value)||null;scheduleWrite();"
+      onchange="render();">
   </div>`).join('');
 
   const droneSlots=e.drones.map((d,di)=>{
