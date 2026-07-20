@@ -550,9 +550,23 @@ function buildExpandRow(ei){
     </div>`;
   }).join('');
 
+  const identity=`
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <div class="sf" style="flex:0 0 70px">
+        <label>Grid</label>
+        <input value="${e.label??''}" placeholder="A1" style="text-transform:uppercase"
+          oninput="ENEMIES[${ei}].label=this.value.trim()||null;render();scheduleWrite()">
+      </div>
+      <div class="sf" style="flex:1">
+        <label>Name</label>
+        <input value="${e.name??''}" placeholder="Player name"
+          oninput="ENEMIES[${ei}].name=this.value;render();scheduleWrite()">
+      </div>
+    </div>`;
+
   return `<tr class="expand-row" id="expand-${ei}"><td colspan="21">
     <div class="expand-body">
-      <div style="font-size:11px;font-weight:600;color:var(--accent);margin-bottom:8px;">${e.name} — edit stats</div>
+      ${identity}
       <div class="expand-grid">${grid}</div>
       <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 4px;">Enemy Drone Lineup</div>
       <div class="expand-drone-grid">${droneSlots}</div>
