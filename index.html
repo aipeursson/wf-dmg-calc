@@ -567,6 +567,13 @@ function buildExpandRow(ei){
       <div class="ds-row"><label>Name</label><input value="${d.name}" oninput="ENEMIES[${ei}].drones[${di}].name=this.value;scheduleWrite()"></div>
       <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="ENEMIES[${ei}].drones[${di}].level=+this.value;scheduleWrite()"></div>
       <div class="ds-row"><label>Type</label><select onchange="ENEMIES[${ei}].drones[${di}].type=this.value;render();scheduleWrite()">${typeOpts}</select></div>
+      <div class="ds-row"><label>Drone Dmg Boost%</label><input type="number" value="${d.dmgBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].dmgBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Physical Boost%</label><input type="number" value="${d.physBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].physBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Energy Boost%</label><input type="number" value="${d.energyBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].energyBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Normal Atk Boost%</label><input type="number" value="${d.naBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].naBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Skill Boost%</label><input type="number" value="${d.skillBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].skillBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>ETR%</label><input type="number" value="${d.etr||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].etr=+this.value;scheduleWrite()"></div>
+      <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].tr=+this.value;scheduleWrite()"></div>
       <div class="ds-row"><label>Resistance Boost%</label><input type="number" value="${d.resistBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].resistBoost=+this.value;render();scheduleWrite()"></div>
     </div>`;
   }).join('');
