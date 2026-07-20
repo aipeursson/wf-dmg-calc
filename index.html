@@ -556,7 +556,7 @@ function buildExpandRow(ei){
     <label>${lbl}</label>
     <input class="num" value="${e[k]??''}" placeholder="?" step="0.01"
       onkeydown="if(event.key==='Enter'){event.preventDefault();nextInput(this);}"
-      oninput="ENEMIES[${ei}]['${k}']=parseFloat(this.value)||null;scheduleWrite();"
+      oninput="ENEMIES[${ei}]['${k}']=this.value===''?null:parseFloat(this.value)??null;scheduleWrite();"
       onchange="render();">
   </div>`).join('');
 
