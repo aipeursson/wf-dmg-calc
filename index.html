@@ -167,6 +167,9 @@ tr:hover td{background:var(--bg3);}
       <option value="none">No modifier</option>
     </select>
   </div>
+  <div class="cg"><label title="5/5 titan gears multiply MG/WG/MS attack by 1.3×">5/5 Titan</label>
+    <input type="checkbox" id="titanGear" onchange="render()">
+  </div>
 </div>
 
 <div class="panel" id="atkPanel">
@@ -480,6 +483,7 @@ const ATK_FIELDS=[
   ['dmg_inc','Dmg Inc (All) %'],['dmg_red','Dmg Red (All) %'],
   ['pvp_inc','PvP Inc %'],['pvp_red','PvP Red %'],
   ['aerial_inc','Aerial Inc %'],['aerial_red','Aerial Red %'],
+  ['mg_dmg_inc','MG Dmg Inc %'],['wg_dmg_inc','WG Dmg Inc %'],['ms_dmg_inc','MS Dmg Inc %'],
 ];
 const ATK_REQUIRED=['elec_enh','burn_enh','reflect_enh','sentinel_enh','heal_enh'];
 
@@ -549,6 +553,7 @@ const ENEMY_FIELDS=[
   ['dmg_inc','Dmg Inc (All) %'],['dmg_red','Dmg Red (All) %'],
   ['pvp_inc','PvP Inc %'],['pvp_red','PvP Red %'],
   ['aerial_inc','Aerial Inc %'],['aerial_red','Aerial Red %'],
+  ['mg_dmg_red','MG Dmg Red %'],['wg_dmg_red','WG Dmg Red %'],['ms_dmg_red','MS Dmg Red %'],
 ];
 
 function buildExpandRow(ei){
@@ -642,25 +647,33 @@ function render(){
   const decKey=d=>d.type==='burn'?'burn_dec':d.type==='elec'?'elec_dec':'reflect_dec';
   const totalDmgBoost=atk.drones.reduce((s,d)=>s+(d.dmgBoost||0),0);
 
+  const titanMul=document.getElementById('titanGear').checked?1.3:1;
+  // WeaponIR weights: MG≈41%, WG≈29%, MS≈30% (from WpCoeff/cooldown ratios)
+  const WMG=0.41,WWG=0.29,WMS=0.30;
+
   const rows=ENEMIES.map((e,ei)=>{
     const hit=hitPct(atk.hit,e.dodge);
     const cp=critPct(atk.crit,e.crit_res);
     const cf=1+(cp/100)*(critMul/100-1);
     const dbd=wpType==='phys'?F((atk.pdb-(e.pd||0))/1000):F((atk.edb-(e.ed||e.edb||0))/1000);
-    const ir=F(((atk.pvp_inc||0)+(atk.dmg_inc||0)-(e.pvp_red||0)-(e.dmg_red||0))/100);
-    let area=1;
-    if(enemyType==='aerial')area=F((atk.aerial_inc-(e.aerial_red||0))/100);
-    else if(enemyType==='ground')area=F((atk.ground_inc-(e.ground_red||0))/100);
+    // Aerial/ground adjustment goes INSIDE F() per PDF §2.2
+    const areaAdj=enemyType==='aerial'?(atk.aerial_inc||0)-(e.aerial_red||0):
+                  enemyType==='ground'?(atk.ground_inc||0)-(e.ground_red||0):0;
+    // WeaponIR: per-weapon dmg inc/red, weighted by approx damage contribution
+    const wIR=WMG*(atk.mg_dmg_inc||0)+WWG*(atk.wg_dmg_inc||0)+WMS*(atk.ms_dmg_inc||0)
+              -WMG*(e.mg_dmg_red||0)-WWG*(e.wg_dmg_red||0)-WMS*(e.ms_dmg_red||0);
+    const ir=F(((atk.pvp_inc||0)+(atk.dmg_inc||0)+wIR+areaAdj-(e.pvp_red||0)-(e.dmg_red||0))/100);
     const fm=fidM(atk.fid_inc,e.fid_dec);
     const sed=(100+(atk.sentinel_enh||0)-(e.sentinel_dec||0))/100;
     const hed=Math.max(0,(100+(atk.heal_enh||0)-(e.heal_dec||0))/100);
-    const dps=(hit/80)*cf*dbd*ir*area*fm;
+    const dps=(hit/80)*cf*dbd*ir*fm;
 
     const enemyResist=e.drones.reduce((s,d)=>s+(d.resistBoost||0),0);
     const slots=atk.drones.map(d=>{
       const ek=enhKey(d), dk=decKey(d);
       const ed=droneED((atk[ek]||0)+(d.etr||0),e[dk]);
-      const baseIR=(atk.pvp_inc||0)+(atk.dmg_inc||0)-(e.pvp_red||0)-(e.dmg_red||0);
+      // Drone IR uses same IR as weapons but no WeaponIR (that's weapon-specific)
+      const baseIR=(atk.pvp_inc||0)+(atk.dmg_inc||0)+areaAdj-(e.pvp_red||0)-(e.dmg_red||0);
       const nairExtra=(wpType==='phys'?(d.physBoost||0):(d.energyBoost||0))+(d.naBoost||0);
       const naIR=F((baseIR+totalDmgBoost-enemyResist+nairExtra)/100);
       const skIR=F((baseIR+totalDmgBoost-enemyResist+(d.skillBoost||0))/100);
@@ -671,8 +684,8 @@ function render(){
       return {ed,na,sk,hasSkMult:sm>0};
     });
 
-    // TTK: your kills on them
-    const atkTAA=(atk.mg_atk||0)+(atk.wg_atk||0)+(atk.ms_atk||0);
+    // TTK: your kills on them (titan multiplies your effective TAA)
+    const atkTAA=titanMul*((atk.mg_atk||0)+(atk.wg_atk||0)+(atk.ms_atk||0));
     const myKillRate=(e.hp&&atkTAA)?dps*atkTAA/e.hp:null;
 
     // TTK: their DPS against you
@@ -683,10 +696,13 @@ function render(){
       const eCp=critPct(e.crit,atk.crit_res);
       const eCf=1+(eCp/100)*(critMul/100-1);
       const eDbd=wpType==='phys'?F(((e.pdb||0)-(atk.pd||0))/1000):F(((e.edb||e.pdb||0)-(atk.ed||0))/1000);
-      const eIr=F(((e.pvp_inc||0)+(e.dmg_inc||0)-(atk.pvp_red||0)-(atk.dmg_red||0))/100);
-      const eArea=enemyType==='aerial'?F(((e.aerial_inc||0)-(atk.aerial_red||0))/100):1;
+      const eAreaAdj=enemyType==='aerial'?(e.aerial_inc||0)-(atk.aerial_red||0):
+                     enemyType==='ground'?(e.ground_inc||0)-(atk.ground_red||0):0;
+      const eWIR=WMG*(e.mg_dmg_inc||0)+WWG*(e.wg_dmg_inc||0)+WMS*(e.ms_dmg_inc||0)
+                -WMG*(atk.mg_dmg_red||0)-WWG*(atk.wg_dmg_red||0)-WMS*(atk.ms_dmg_red||0);
+      const eIr=F(((e.pvp_inc||0)+(e.dmg_inc||0)+eWIR+eAreaAdj-(atk.pvp_red||0)-(atk.dmg_red||0))/100);
       const eFm=fidM(e.fid_inc||0,atk.fid_dec||0);
-      const eDps=(eHit/80)*eCf*eDbd*eIr*eArea*eFm;
+      const eDps=(eHit/80)*eCf*eDbd*eIr*eFm;
       const eTAA=(e.mg_atk||0)+(e.wg_atk||0)+(e.ms_atk||0);
       if(atk.hp&&eTAA) theirKillRate=eDps*eTAA/atk.hp;
     }
