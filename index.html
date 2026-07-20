@@ -656,7 +656,7 @@ function render(){
       if(atk.hp&&eTAA) theirKillRate=eDps*eTAA/atk.hp;
     }
 
-    return {e,ei,hit,cp,cf,dbd,ir,area,fm,slots,sed,hed,dps,myKillRate,theirKillRate};
+    return {e,ei,hit,cp,cf,dbd,ir,area,fm,slots,sed,hed,dps,myKillRate,theirKillRate,hasEO};
   });
 
   rows.sort((a,b)=>b.dps-a.dps);
@@ -666,7 +666,7 @@ function render(){
 
   let html='';
   for(const r of rows){
-    const {e,ei,hit,cp,cf,dbd,ir,area,fm,slots,sed,hed,dps,myKillRate,theirKillRate}=r;
+    const {e,ei,hit,cp,cf,dbd,ir,area,fm,slots,sed,hed,dps,myKillRate,theirKillRate,hasEO}=r;
     const bw=Math.round((dps/maxDps)*100);
     const dc=dps/maxDps>=0.8?'good':dps/maxDps>=0.6?'ok':dps/maxDps>=0.4?'bad':'vbad';
     const expanded=expandedEnemy===ei;
