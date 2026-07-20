@@ -461,18 +461,20 @@ function loadAttacker(name){
 // ═══════════════════════════════════════
 const ATK_FIELDS=[
   ['mg_atk','MG Attack'],['wg_atk','WG Attack'],['ms_atk','MS Attack'],['hp','HP'],
-  ['hit','Hit Rate'],['crit','Crit Rate'],['pdb','Phys Dmg Break'],['pd','Phys Defense'],
-  ['edb','Energy Dmg Break'],['ed','Energy Defense'],
+  ['crit','Crit Rate'],['dodge','Dodge Rate'],
+  ['elec_enh','Elec Enhance %'],['burn_enh','Burn Enhance %'],['reflect_enh','Reflect Enhance %'],
+  ['crit_res','Crit Resistance'],
+  ['hit','Hit Rate'],
+  ['elec_dec','Elec Dec %'],['burn_dec','Burn Dec %'],['reflect_dec','Reflect Dec %'],
+  ['pdb','Phys Dmg Break'],['pd','Phys Defense'],['edb','Energy Dmg Break'],['ed','Energy Defense'],
+  ['fid_inc','FDI %'],['fid_dec','FDD %'],
+  ['sentinel_enh','Sentinel Enh %'],['sentinel_dec','Sentinel Dec %'],
+  ['heal_enh','Heal Enhance %'],['heal_dec','Heal Dec %'],
+  ['dmg_inc','Dmg Inc (All) %'],['dmg_red','Dmg Red (All) %'],
   ['pvp_inc','PvP Inc %'],['pvp_red','PvP Red %'],
   ['aerial_inc','Aerial Inc %'],['aerial_red','Aerial Red %'],
-  ['ground_inc','Ground Inc %'],['ground_red','Ground Red %'],
-  ['fid_inc','FID Inc %'],['fid_dec','FID Dec %'],
-  ['burn_enh','Burn Enhance %'],['elec_enh','Elec Enhance %'],['reflect_enh','Reflect Enhance %'],
-  ['burn_dec','Burn Decrease %'],['elec_dec','Elec Decrease %'],['reflect_dec','Reflect Decrease %'],
-  ['sentinel_enh','Sentinel Enh %'],['sentinel_dec','Sentinel Dec %'],
-  ['heal_enh','Heal Enhance %'],['heal_dec','Heal Decrease %'],
 ];
-const ATK_REQUIRED=['burn_enh','elec_enh','reflect_enh','sentinel_enh','heal_enh'];
+const ATK_REQUIRED=['elec_enh','burn_enh','reflect_enh','sentinel_enh','heal_enh'];
 
 function buildAtkPanel(){
   const a=ATK_DB[currentAtk];
@@ -525,14 +527,18 @@ function buildDronePanel(){
 //  ENEMY EXPAND ROW
 // ═══════════════════════════════════════
 const ENEMY_FIELDS=[
-  ['dodge','Dodge'],['crit_res','Crit Resist'],['fid_dec','FID Dec %'],
-  ['burn_dec','Burn Dec %'],['elec_dec','Elec Dec %'],['reflect_dec','Reflect Dec %'],
-  ['pvp_red','PvP Red %'],['aerial_red','Aerial Red %'],['ground_red','Ground Red %'],
+  ['mg_atk','MG Attack'],['wg_atk','WG Attack'],['ms_atk','MS Attack'],['hp','HP'],
+  ['crit','Crit Rate'],['dodge','Dodge Rate'],
+  ['elec_enh','Elec Enhance %'],['burn_enh','Burn Enhance %'],['reflect_enh','Reflect Enhance %'],
+  ['crit_res','Crit Resistance'],
+  ['hit','Hit Rate'],
+  ['elec_dec','Elec Dec %'],['burn_dec','Burn Dec %'],['reflect_dec','Reflect Dec %'],
   ['pdb','Phys Dmg Break'],['pd','Phys Defense'],['edb','Eng Dmg Break'],['ed','Eng Defense'],
+  ['fid_inc','FDI %'],['fid_dec','FDD %'],
   ['sentinel_enh','Sentinel Enh %'],['sentinel_dec','Sentinel Dec %'],['heal_dec','Heal Dec %'],
-  ['hp','HP'],['mg_atk','MG Attack'],['wg_atk','WG Attack'],['ms_atk','MS Attack'],
-  ['hit','Hit Rate'],['crit','Crit Rate'],['pvp_inc','PvP Inc %'],
-  ['aerial_inc','Aerial Inc %'],['ground_inc','Ground Inc %'],
+  ['dmg_inc','Dmg Inc (All) %'],['dmg_red','Dmg Red (All) %'],
+  ['pvp_inc','PvP Inc %'],['pvp_red','PvP Red %'],
+  ['aerial_inc','Aerial Inc %'],['aerial_red','Aerial Red %'],
 ];
 
 function buildExpandRow(ei){
@@ -615,7 +621,7 @@ function render(){
     const cp=critPct(atk.crit,e.crit_res);
     const cf=1+(cp/100)*(critMul/100-1);
     const dbd=wpType==='phys'?F((atk.pdb-(e.pd||0))/1000):F((atk.edb-(e.ed||e.edb||0))/1000);
-    const ir=F((atk.pvp_inc-e.pvp_red)/100);
+    const ir=F(((atk.pvp_inc||0)+(atk.dmg_inc||0)-(e.pvp_red||0)-(e.dmg_red||0))/100);
     let area=1;
     if(enemyType==='aerial')area=F((atk.aerial_inc-(e.aerial_red||0))/100);
     else if(enemyType==='ground')area=F((atk.ground_inc-(e.ground_red||0))/100);
@@ -647,10 +653,9 @@ function render(){
       const eCp=critPct(e.crit,atk.crit_res);
       const eCf=1+(eCp/100)*(critMul/100-1);
       const eDbd=wpType==='phys'?F(((e.pdb||0)-(atk.pd||0))/1000):F(((e.edb||e.pdb||0)-(atk.ed||0))/1000);
-      const eIr=F(((e.pvp_inc||0)-(atk.pvp_red||0))/100);
-      const eArea=enemyType==='aerial'?F(((e.aerial_inc||0)-(atk.aerial_red||0))/100):
-                  enemyType==='ground'?F(((e.ground_inc||0)-(atk.ground_red||0))/100):1;
-      const eFm=fidM(0,atk.fid_dec||0);
+      const eIr=F(((e.pvp_inc||0)+(e.dmg_inc||0)-(atk.pvp_red||0)-(atk.dmg_red||0))/100);
+      const eArea=enemyType==='aerial'?F(((e.aerial_inc||0)-(atk.aerial_red||0))/100):1;
+      const eFm=fidM(e.fid_inc||0,atk.fid_dec||0);
       const eDps=(eHit/80)*eCf*eDbd*eIr*eArea*eFm;
       const eTAA=(e.mg_atk||0)+(e.wg_atk||0)+(e.ms_atk||0);
       if(atk.hp&&eTAA) theirKillRate=eDps*eTAA/atk.hp;
