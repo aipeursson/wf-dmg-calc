@@ -200,15 +200,14 @@ tr:hover td{background:var(--bg3);}
           <th rowspan="2" title="min(80,max(0,crit−crit_res))">Crit%</th>
           <th rowspan="2" title="1+(crit%/100)*(critMult/100−1)">CritF</th>
           <th rowspan="2" title="F((pdb−pd)/1000) phys or F((edb−ed)/1000) energy">DBD</th>
-          <th rowspan="2" title="F((pvp_inc−pvp_red)/100)">PvP</th>
-          <th rowspan="2" title="F((aerial/ground_inc − aerial/ground_red)/100)">Area</th>
+          <th rowspan="2" title="F((pvp_inc+dmg_inc+WeaponIR+areaAdj−pvp_red−dmg_red)/100)">IR</th>
           <th rowspan="2" title="FID=100+fid_inc−fid_dec">FID</th>
           <th colspan="3" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr0">Left-flank</th>
           <th colspan="3" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr1">Defender</th>
           <th colspan="3" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr2">Right-flank</th>
           <th rowspan="2" title="(100+sentinel_enh−sentinel_dec)/100">Sent</th>
           <th rowspan="2" title="max(0,(100+heal_enh−heal_dec)/100)">Heal</th>
-          <th rowspan="2" title="(Hit/80)×CritF×DBD×PvP×Area×FID — relative">DPS</th>
+          <th rowspan="2" title="(Hit/80)×CritF×DBD×IR×FID — relative">DPS</th>
           <th rowspan="2" title="enemy HP ÷ (DPS × your TAA) — green = fast kill">TTK↓</th>
           <th rowspan="2" title="your HP ÷ (enemy DPS × enemy TAA) — green = they kill you slowly">TTK↑</th>
         </tr>
@@ -747,7 +746,6 @@ function render(){
       <td>${cf.toFixed(3)}</td>
       <td class="${colorM(dbd,[1.0,0.95,0.9])}">${dbd.toFixed(3)}</td>
       <td class="${colorM(ir)}">${ir.toFixed(3)}</td>
-      <td class="${colorM(area)}">${area.toFixed(3)}</td>
       <td class="${colorM(fm)}" title="FID=${(100+(atk.fid_inc||0)-(e.fid_dec||0)).toFixed(1)}">${fm.toFixed(3)}</td>
       ${droneCols}
       <td class="${colorM(sed)}">${sed.toFixed(3)}</td>
