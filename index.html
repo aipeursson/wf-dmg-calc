@@ -527,6 +527,8 @@ function buildDronePanel(){
       <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].tr=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label title="Quick Reload passive — speeds up normal attacks">Quick Reload%</label><input type="number" value="${d.qr||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].qr=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label title="Cooldown Cut passive — speeds up skill attacks">Cooldown Cut%</label><input type="number" value="${d.cc||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].cc=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Spot Weakness passive — NA crit rate (independent of global crit)">Spot Weakness%</label><input type="number" value="${d.sw||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].sw=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Raging Assault passive — adds to base 200% NA crit damage">Raging Assault%</label><input type="number" value="${d.ra||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].ra=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>Resistance Boost%</label><input type="number" value="${d.resistBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].resistBoost=+this.value;render();scheduleWrite()"></div>
     </div>`;
   }).join('');
@@ -589,6 +591,8 @@ function buildExpandRow(ei){
       <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].tr=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label title="Quick Reload passive">Quick Reload%</label><input type="number" value="${d.qr||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].qr=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label title="Cooldown Cut passive">Cooldown Cut%</label><input type="number" value="${d.cc||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].cc=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Spot Weakness passive — NA crit rate">Spot Weakness%</label><input type="number" value="${d.sw||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].sw=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Raging Assault passive — adds to 200% base NA crit damage">Raging Assault%</label><input type="number" value="${d.ra||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].ra=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>Resistance Boost%</label><input type="number" value="${d.resistBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].resistBoost=+this.value;render();scheduleWrite()"></div>
     </div>`;
   }).join('');
@@ -696,8 +700,10 @@ function render(){
       const hasSkMult=sm>0;
       const naFreq=1+(d.qr||0)/100;
       const skFreq=hasSkMult?(1+(d.cc||0)/100)/3:0;
+      // NA crit factor: Spot Weakness% crit rate, base 200%+Raging Assault crit dmg (independent of global)
+      const naCritF=1+(d.sw||0)/100*((200+(d.ra||0))/100-1);
       // per TAA·dbd·fm (drones always hit; skills don't crit)
-      const droneDpsMul=DSMCoeff*(ed??1)*(tr*naIR*naFreq+sm*skIR*skFreq);
+      const droneDpsMul=DSMCoeff*(ed??1)*(tr*naIR*naFreq*naCritF+sm*skIR*skFreq);
       return {ed,na,sk,hasSkMult,droneDpsMul};
     });
     const totalDroneDpsMul=slots.reduce((s,sl)=>s+sl.droneDpsMul,0);
@@ -740,7 +746,8 @@ function render(){
         const eSM=(d.skMult||0)/100;
         const naFreq=1+(d.qr||0)/100;
         const skFreq=eSM>0?(1+(d.cc||0)/100)/3:0;
-        return s+DSMCoeff*eDED*(eTR*eDroneNaIR*naFreq+eSM*eDroneSKIR*skFreq);
+        const naCritF=1+(d.sw||0)/100*((200+(d.ra||0))/100-1);
+        return s+DSMCoeff*eDED*(eTR*eDroneNaIR*naFreq*naCritF+eSM*eDroneSKIR*skFreq);
       },0);
       if(atk.hp&&eTAA) theirKillRate=(eDps+eTotalDroneDpsMul*eDbd*eFm)*eTAA/atk.hp;
     }
