@@ -473,6 +473,8 @@ const ATK_FIELDS=[
   ['crit','Crit Rate'],['dodge','Dodge Rate'],
   ['elec_enh','Elec Enhance %'],['burn_enh','Burn Enhance %'],['reflect_enh','Reflect Enhance %'],
   ['crit_res','Crit Resistance'],
+  ['mg_crit','MG Crit Rate'],['wg_crit','WG Crit Rate'],['ms_crit','MS Crit Rate'],
+  ['mg_crit_res','MG Crit Res'],['wg_crit_res','WG Crit Res'],['ms_crit_res','MS Crit Res'],
   ['hit','Hit Rate'],
   ['elec_dec','Elec Dec %'],['burn_dec','Burn Dec %'],['reflect_dec','Reflect Dec %'],
   ['pdb','Phys Dmg Break'],['pd','Phys Defense'],['edb','Energy Dmg Break'],['ed','Energy Defense'],
@@ -544,6 +546,8 @@ const ENEMY_FIELDS=[
   ['crit','Crit Rate'],['dodge','Dodge Rate'],
   ['elec_enh','Elec Enhance %'],['burn_enh','Burn Enhance %'],['reflect_enh','Reflect Enhance %'],
   ['crit_res','Crit Resistance'],
+  ['mg_crit','MG Crit Rate'],['wg_crit','WG Crit Rate'],['ms_crit','MS Crit Rate'],
+  ['mg_crit_res','MG Crit Res'],['wg_crit_res','WG Crit Res'],['ms_crit_res','MS Crit Res'],
   ['hit','Hit Rate'],
   ['elec_dec','Elec Dec %'],['burn_dec','Burn Dec %'],['reflect_dec','Reflect Dec %'],
   ['pdb','Phys Dmg Break'],['pd','Phys Defense'],['edb','Eng Dmg Break'],['ed','Eng Defense'],
@@ -652,8 +656,12 @@ function render(){
 
   const rows=ENEMIES.map((e,ei)=>{
     const hit=hitPct(atk.hit,e.dodge);
-    const cp=critPct(atk.crit,e.crit_res);
-    const cf=1+(cp/100)*(critMul/100-1);
+    const cpW=(lc,lr)=>Math.min(80,Math.max(0,atk.crit-(e.crit_res||0)+lc-lr));
+    const cp_mg=cpW(atk.mg_crit||0,e.mg_crit_res||0);
+    const cp_wg=cpW(atk.wg_crit||0,e.wg_crit_res||0);
+    const cp_ms=cpW(atk.ms_crit||0,e.ms_crit_res||0);
+    const cp=Math.round(WMG*cp_mg+WWG*cp_wg+WMS*cp_ms);
+    const cf=WMG*(1+(cp_mg/100)*(critMul/100-1))+WWG*(1+(cp_wg/100)*(critMul/100-1))+WMS*(1+(cp_ms/100)*(critMul/100-1));
     const dbd=wpType==='phys'?F((atk.pdb-(e.pd||0))/1000):F((atk.edb-(e.ed||e.edb||0))/1000);
     // Aerial/ground adjustment goes INSIDE F() per PDF §2.2
     const areaAdj=enemyType==='aerial'?(atk.aerial_inc||0)-(e.aerial_red||0):
@@ -692,8 +700,12 @@ function render(){
     let theirKillRate=null;
     if(hasEO){
       const eHit=hitPct(e.hit,atk.dodge);
-      const eCp=critPct(e.crit,atk.crit_res);
-      const eCf=1+(eCp/100)*(critMul/100-1);
+      const eCpW=(lc,lr)=>Math.min(80,Math.max(0,(e.crit||0)-(atk.crit_res||0)+lc-lr));
+      const eCp_mg=eCpW(e.mg_crit||0,atk.mg_crit_res||0);
+      const eCp_wg=eCpW(e.wg_crit||0,atk.wg_crit_res||0);
+      const eCp_ms=eCpW(e.ms_crit||0,atk.ms_crit_res||0);
+      const eCp=Math.round(WMG*eCp_mg+WWG*eCp_wg+WMS*eCp_ms);
+      const eCf=WMG*(1+(eCp_mg/100)*(critMul/100-1))+WWG*(1+(eCp_wg/100)*(critMul/100-1))+WMS*(1+(eCp_ms/100)*(critMul/100-1));
       const eDbd=wpType==='phys'?F(((e.pdb||0)-(atk.pd||0))/1000):F(((e.edb||e.pdb||0)-(atk.ed||0))/1000);
       const eAreaAdj=enemyType==='aerial'?(e.aerial_inc||0)-(atk.aerial_red||0):
                      enemyType==='ground'?(e.ground_inc||0)-(atk.ground_red||0):0;
