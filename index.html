@@ -210,6 +210,7 @@ tr:hover td{background:var(--bg3);}
           <th rowspan="2" title="(Hit/80)×CritF×DBD×IR×FID — relative">DPS</th>
           <th rowspan="2" title="enemy HP ÷ (DPS × your TAA) — green = fast kill">TTK↓</th>
           <th rowspan="2" title="your HP ÷ (enemy DPS × enemy TAA) — green = they kill you slowly">TTK↑</th>
+          <th rowspan="2">Sim</th>
         </tr>
         <tr>
           <th title="(100+enh−dec)/100 clamped [1,2]" style="border-left:1px solid var(--border)">ED</th>
@@ -619,7 +620,7 @@ function buildExpandRow(ei){
       </div>
     </div>`;
 
-  return `<tr class="expand-row" id="expand-${ei}"><td colspan="23">
+  return `<tr class="expand-row" id="expand-${ei}"><td colspan="24">
     <div class="expand-body">
       ${identity}
       <div class="expand-grid">${grid}</div>
@@ -804,10 +805,204 @@ function render(){
       </td>
       ${myTTKcell}
       ${theirTTKcell}
+      <td style="text-align:center"><button class="btn" onclick="runSim(${ei})" title="Monte Carlo simulation">▶</button></td>
     </tr>`;
     if(expanded) html+=buildExpandRow(ei);
   }
   document.getElementById('tableBody').innerHTML=html;
+}
+
+// ═══════════════════════════════════════
+//  MONTE CARLO SIMULATOR
+// ═══════════════════════════════════════
+const SIM_N=1000, SIM_LIMIT=30;
+const WP_BASE_CD={mg:0.96,wg:1.6,ms:4.0};
+const WP_COEFF_VAL={mg:0.07575,wg:0.09,ms:0.225};
+
+function buildSimData(shooter,target,cfg){
+  const {wpType,critMul,enemyType,shooterTitan,titanMul}=cfg;
+  const tM=shooterTitan?titanMul:1;
+  const dbd=wpType==='phys'?F(((shooter.pdb||0)-(target.pd||0))/1000):F(((shooter.edb||0)-(target.ed||target.edb||0))/1000);
+  const areaAdj=enemyType==='aerial'?(shooter.aerial_inc||0)-(target.aerial_red||0):enemyType==='ground'?(shooter.ground_inc||0)-(target.ground_red||0):0;
+  const fm=fidM(shooter.fid_inc,target.fid_dec);
+  const baseIR=(shooter.pvp_inc||0)+(shooter.dmg_inc||0)+areaAdj-(target.pvp_red||0)-(target.dmg_red||0);
+  const taa=tM*((shooter.mg_atk||0)+(shooter.wg_atk||0)+(shooter.ms_atk||0));
+  const hitP=Math.min(80,Math.max(20,100+(shooter.hit||0)-(target.dodge||0)));
+
+  const weapons={};
+  for(const w of ['mg','wg','ms']){
+    const wAtk=tM*(shooter[w+'_atk']||0);
+    const wIR=(shooter[w+'_dmg_inc']||0)-(target[w+'_dmg_red']||0);
+    const ir=F((baseIR+wIR)/100);
+    const gC=(shooter.crit||0)-(target.crit_res||0);
+    const lC=(shooter[w+'_crit']||0)-(target[w+'_crit_res']||0);
+    const critP=Math.min(80,Math.max(0,gC+lC));
+    const base=WP_COEFF_VAL[w]*wAtk*dbd*ir*fm;
+    const cd=WP_BASE_CD[w]/(1+(shooter[w+'_spd']||0)/100);
+    weapons[w]={hitP,critP,base,crit:base*critMul/100,cd};
+  }
+
+  const enhKey=d=>d.type==='burn'?'burn_enh':d.type==='elec'?'elec_enh':'reflect_enh';
+  const decKey=d=>d.type==='burn'?'burn_dec':d.type==='elec'?'elec_dec':'reflect_dec';
+  const totalBoost=shooter.drones.reduce((s,d)=>s+(d.dmgBoost||0),0);
+  const eResist=target.drones.reduce((s,d)=>s+(d.resistBoost||0),0);
+
+  const drones=shooter.drones.map(d=>{
+    const ek=enhKey(d),dk=decKey(d);
+    const ed=clamp((100+(shooter[ek]||0)+(d.etr||0)-(target[dk]||0))/100,1,2);
+    const nairX=(wpType==='phys'?(d.physBoost||0):(d.energyBoost||0))+(d.naBoost||0);
+    const naIR=F((baseIR+totalBoost-eResist+nairX)/100);
+    const skIR=F((baseIR+totalBoost-eResist+(d.skillBoost||0))/100);
+    const tr=1+(d.tr||0)/100;
+    const sm=(d.skMult||0)/100;
+    const isBurn=d.type==='burn';
+    const naBase=tr*ed*DSMCoeff*taa*dbd*naIR*fm;
+    const naCritF=(200+(d.ra||0))/100;
+    const naCritP=Math.min(80,d.sw||0);
+    const skDmg=(!isBurn&&sm>0)?sm*ed*DSMCoeff*taa*dbd*skIR*fm:0;
+    const burnContrib=isBurn?0.7*ed*DSMCoeff*taa*dbd*skIR*fm:0;
+    return {naBase,naCritF,naCritP,naHitP:hitP,skDmg,burnContrib,isBurn,
+            naCd:1/(1+(d.qr||0)/100),skCd:3/(1+(d.cc||0)/100)};
+  });
+
+  return {weapons,drones};
+}
+
+function simOnce(aD,dD,aHP0,dHP0,aBP,dBP){
+  let aHP=aHP0,dHP=dHP0,aBurn=[],dBurn=[],aBurnOn=false,dBurnOn=false;
+  const eq=[];
+  const push=ev=>{
+    let lo=0,hi=eq.length;
+    while(lo<hi){const m=(lo+hi)>>1;eq[m].t<=ev.t?lo=m+1:hi=m;}
+    eq.splice(lo,0,ev);
+  };
+  const af=aBP>=dBP,eps=0.0001;
+  let t=0;
+  for(const w of ['mg','wg','ms']){
+    push({t:t+(af?0:eps),tp:'wp',w,o:'a'});
+    push({t:t+(af?eps:0),tp:'wp',w,o:'d'});
+    t+=2*eps;
+  }
+  for(let sl=0;sl<3;sl++){
+    push({t:t+(af?0:eps),tp:'sk',sl,o:'a'});
+    push({t:t+(af?eps:0),tp:'sk',sl,o:'d'});
+    t+=2*eps;
+    push({t:t+(af?0:eps),tp:'na',sl,o:'a'});
+    push({t:t+(af?eps:0),tp:'na',sl,o:'d'});
+    t+=2*eps;
+  }
+  let ct=0;
+  while(eq.length){
+    const ev=eq.shift();ct=ev.t;
+    if(ct>SIM_LIMIT||aHP<=0||dHP<=0)break;
+    const isA=ev.o==='a';
+    const D=isA?aD:dD;
+    if(ev.tp==='wp'){
+      const wd=D.weapons[ev.w];
+      if(Math.random()*100<wd.hitP){
+        const dmg=Math.random()*100<wd.critP?wd.crit:wd.base;
+        isA?dHP-=dmg:aHP-=dmg;
+      }
+      if(aHP<=0||dHP<=0)break;
+      push({...ev,t:ev.t+wd.cd});
+    }else if(ev.tp==='na'){
+      const dd=D.drones[ev.sl];
+      if(Math.random()*100<dd.naHitP){
+        const dmg=Math.random()*100<dd.naCritP?dd.naBase*dd.naCritF:dd.naBase;
+        isA?dHP-=dmg:aHP-=dmg;
+      }
+      if(aHP<=0||dHP<=0)break;
+      push({...ev,t:ev.t+dd.naCd});
+    }else if(ev.tp==='sk'){
+      const dd=D.drones[ev.sl];
+      if(dd.isBurn){
+        const bArr=isA?aBurn:dBurn;
+        bArr.push(dd.burnContrib);
+        if(bArr.length>6)bArr.shift();
+        if(isA&&!aBurnOn){push({t:ev.t+1,tp:'bt',o:'a'});aBurnOn=true;}
+        else if(!isA&&!dBurnOn){push({t:ev.t+1,tp:'bt',o:'d'});dBurnOn=true;}
+      }else if(dd.skDmg>0){
+        isA?dHP-=dd.skDmg:aHP-=dd.skDmg;
+        if(aHP<=0||dHP<=0)break;
+      }
+      push({...ev,t:ev.t+dd.skCd});
+    }else if(ev.tp==='bt'){
+      const bArr=isA?aBurn:dBurn;
+      if(bArr.length>0){
+        const dmg=bArr.reduce((s,b)=>s+b,0);
+        isA?dHP-=dmg:aHP-=dmg;
+        if(aHP<=0||dHP<=0)break;
+        push({...ev,t:ev.t+1});
+      }else{isA?aBurnOn=false:dBurnOn=false;}
+    }
+  }
+  if(aHP<=0&&dHP<=0)return{w:'draw',t:ct};
+  if(aHP<=0)return{w:'def',t:ct};
+  if(dHP<=0)return{w:'atk',t:ct};
+  return{w:aHP/aHP0>dHP/dHP0?'atk':'def',t:SIM_LIMIT,tl:true};
+}
+
+function runSim(ei){
+  const e=ENEMIES[ei],atk=ATK_DB[currentAtk];
+  if(!atk.hp||!e.hp)return alert('Enter HP for both attacker and enemy first.');
+  const wpType=document.getElementById('wpType').value;
+  const critMul=parseFloat(document.getElementById('critMult').value)||200;
+  const enemyType=document.getElementById('enemyType').value;
+  const titanMul=document.getElementById('titanGear').checked?1.3:1;
+  const cfg={wpType,critMul,enemyType,titanMul};
+  const aD=buildSimData(atk,e,{...cfg,shooterTitan:true});
+  const dD=buildSimData(e,atk,{...cfg,shooterTitan:false});
+  let aW=0,dW=0,draws=0,tlN=0;
+  const aT=[],dT=[];
+  for(let i=0;i<SIM_N;i++){
+    const r=simOnce(aD,dD,atk.hp,e.hp,atk.bp||0,e.bp||0);
+    if(r.w==='atk'){aW++;aT.push(r.t);if(r.tl)tlN++;}
+    else if(r.w==='def'){dW++;dT.push(r.t);if(r.tl)tlN++;}
+    else draws++;
+  }
+  const avg=a=>a.length?(a.reduce((s,v)=>s+v,0)/a.length):null;
+  showSimModal(atk,e,{aW,dW,draws,tlN,aAvg:avg(aT),dAvg:avg(dT)});
+}
+
+function showSimModal(atk,e,r){
+  let m=document.getElementById('simModal');
+  if(!m){
+    m=document.createElement('div');
+    m.id='simModal';
+    m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:1000';
+    m.addEventListener('click',ev=>{if(ev.target===m)m.style.display='none';});
+    document.body.appendChild(m);
+  }
+  const aP=(r.aW/SIM_N*100).toFixed(1),dP=(r.dW/SIM_N*100).toFixed(1),drP=(r.draws/SIM_N*100).toFixed(1);
+  const fmt=v=>v==null?'—':v.toFixed(2)+'s';
+  const eName=e.label?(e.label+' '+e.name):e.name;
+  m.innerHTML=`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px;min-width:340px;max-width:500px;width:90vw">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <strong style="color:var(--accent);font-size:13px">${currentAtk} vs ${eName}</strong>
+      <button class="btn" onclick="document.getElementById('simModal').style.display='none'">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px">n=${SIM_N} · ${r.tlN} decided by time limit (${SIM_LIMIT}s)</div>
+    <div style="height:32px;display:flex;border-radius:4px;overflow:hidden;margin-bottom:8px">
+      <div style="background:var(--green);width:${aP}%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;min-width:2px">${+aP>10?aP+'%':''}</div>
+      ${r.draws>0?`<div style="background:var(--muted);width:${drP}%;min-width:2px"></div>`:''}
+      <div style="background:var(--red);flex:1;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff">${+dP>10?dP+'%':''}</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:16px">
+      <span style="color:var(--green)">▲ ${currentAtk} <strong>${aP}%</strong></span>
+      ${r.draws>0?`<span style="color:var(--muted)">Draw ${drP}%</span>`:''}
+      <span style="color:var(--red)">▼ ${eName} <strong>${dP}%</strong></span>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <tr style="color:var(--muted);font-size:11px"><td></td><td style="text-align:right;padding:2px 8px">Win%</td><td style="text-align:right;padding:2px 8px">Avg kill time</td></tr>
+      <tr><td style="padding:4px 0;color:var(--green)">${currentAtk}</td><td style="text-align:right;padding:4px 8px"><strong>${aP}%</strong></td><td style="text-align:right;padding:4px 8px">${fmt(r.aAvg)}</td></tr>
+      <tr><td style="padding:4px 0;color:var(--red)">${eName}</td><td style="text-align:right;padding:4px 8px"><strong>${dP}%</strong></td><td style="text-align:right;padding:4px 8px">${fmt(r.dAvg)}</td></tr>
+    </table>
+    <div style="font-size:10px;color:var(--muted);margin-top:14px;line-height:1.6;border-top:1px solid var(--border);padding-top:10px">
+      v1 includes: weapons (hit/crit/cooldown), drone NA+skills, burn ticks.<br>
+      Excludes: sentinels, mechs, fighter/armor, Flaming stacks, SpSKMod.
+    </div>
+  </div>`;
+  m.style.display='flex';
 }
 
 // ── Init ──
