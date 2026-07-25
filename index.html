@@ -815,7 +815,7 @@ function render(){
 // ═══════════════════════════════════════
 //  MONTE CARLO SIMULATOR
 // ═══════════════════════════════════════
-const SIM_N=1000, SIM_LIMIT=30;
+const SIM_N=1000, SIM_LIMIT=300; // safety only — WF has no time limit, battles end at 0 HP
 const WP_BASE_CD={mg:0.96,wg:1.6,ms:4.0};
 const WP_COEFF_VAL={mg:0.07575,wg:0.09,ms:0.225};
 
@@ -981,7 +981,7 @@ function showSimModal(atk,e,r){
       <strong style="color:var(--accent);font-size:13px">${currentAtk} vs ${eName}</strong>
       <button class="btn" onclick="document.getElementById('simModal').style.display='none'">✕</button>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:14px">n=${SIM_N} · ${r.tlN} decided by time limit (${SIM_LIMIT}s)</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px">n=${SIM_N} runs</div>
     <div style="height:32px;display:flex;border-radius:4px;overflow:hidden;margin-bottom:8px">
       <div style="background:var(--green);width:${aP}%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;min-width:2px">${+aP>10?aP+'%':''}</div>
       ${r.draws>0?`<div style="background:var(--muted);width:${drP}%;min-width:2px"></div>`:''}
