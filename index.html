@@ -314,6 +314,7 @@ const critPct = (c,cr) => Math.min(80,Math.max(0,c-cr));
 const clamp   = (v,mn,mx) => Math.min(mx,Math.max(mn,v));
 const fidM    = (fi,fd) => { const fid=100+(fi||0)-(fd||0); return fid>=50?fid/100:50/(100+2*(50-fid)); };
 const droneED = (enh,dd) => dd==null?null:clamp((100+enh-dd)/100,1,2);
+const DSMCoeff = 0.0061873;
 
 function droneNAIR(atk,slotIdx,enemy){
   const d=atk.drones[slotIdx];
@@ -524,6 +525,8 @@ function buildDronePanel(){
       <div class="ds-row"><label>Skill Mult%</label><input type="number" value="${d.skMult||0}" step="1" title="Drone skill multiplier (e.g. 300 for SR max evolve)" oninput="ATK_DB['${currentAtk}'].drones[${i}].skMult=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>ETR%</label><input type="number" value="${d.etr||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].etr=+this.value;scheduleWrite()"></div>
       <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].tr=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Quick Reload passive — speeds up normal attacks">Quick Reload%</label><input type="number" value="${d.qr||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].qr=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Cooldown Cut passive — speeds up skill attacks">Cooldown Cut%</label><input type="number" value="${d.cc||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].cc=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>Resistance Boost%</label><input type="number" value="${d.resistBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].resistBoost=+this.value;render();scheduleWrite()"></div>
     </div>`;
   }).join('');
@@ -584,6 +587,8 @@ function buildExpandRow(ei){
       <div class="ds-row"><label>Skill Mult%</label><input type="number" value="${d.skMult||0}" step="1" title="Drone skill multiplier (e.g. 300 for SR max evolve)" oninput="ENEMIES[${ei}].drones[${di}].skMult=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>ETR%</label><input type="number" value="${d.etr||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].etr=+this.value;scheduleWrite()"></div>
       <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].tr=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Quick Reload passive">Quick Reload%</label><input type="number" value="${d.qr||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].qr=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Cooldown Cut passive">Cooldown Cut%</label><input type="number" value="${d.cc||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].cc=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>Resistance Boost%</label><input type="number" value="${d.resistBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].resistBoost=+this.value;render();scheduleWrite()"></div>
     </div>`;
   }).join('');
@@ -679,7 +684,7 @@ function render(){
     const slots=atk.drones.map(d=>{
       const ek=enhKey(d), dk=decKey(d);
       const ed=droneED((atk[ek]||0)+(d.etr||0),e[dk]);
-      // Drone IR uses same IR as weapons but no WeaponIR (that's weapon-specific)
+      // Drone IR uses same base IR as weapons but no WeaponIR (weapon-specific)
       const baseIR=(atk.pvp_inc||0)+(atk.dmg_inc||0)+areaAdj-(e.pvp_red||0)-(e.dmg_red||0);
       const nairExtra=(wpType==='phys'?(d.physBoost||0):(d.energyBoost||0))+(d.naBoost||0);
       const naIR=F((baseIR+totalDmgBoost-enemyResist+nairExtra)/100);
@@ -688,12 +693,18 @@ function render(){
       const sm=(d.skMult||0)/100;
       const na=tr*naIR;
       const sk=sm>0?sm*skIR:skIR;
-      return {ed,na,sk,hasSkMult:sm>0};
+      const hasSkMult=sm>0;
+      const naFreq=1+(d.qr||0)/100;
+      const skFreq=hasSkMult?(1+(d.cc||0)/100)/3:0;
+      // per TAA·dbd·fm (drones always hit; skills don't crit)
+      const droneDpsMul=DSMCoeff*(ed??1)*(tr*naIR*naFreq+sm*skIR*skFreq);
+      return {ed,na,sk,hasSkMult,droneDpsMul};
     });
+    const totalDroneDpsMul=slots.reduce((s,sl)=>s+sl.droneDpsMul,0);
 
-    // TTK: your kills on them (titan multiplies your effective TAA)
+    // TTK: your kills on them (weapons + drones; titan multiplies your effective TAA)
     const atkTAA=titanMul*((atk.mg_atk||0)+(atk.wg_atk||0)+(atk.ms_atk||0));
-    const myKillRate=(e.hp&&atkTAA)?dps*atkTAA/e.hp:null;
+    const myKillRate=(e.hp&&atkTAA)?(dps+totalDroneDpsMul*dbd*fm)*atkTAA/e.hp:null;
 
     // TTK: their DPS against you
     const hasEO=e.hit!=null&&e.crit!=null&&e.pvp_inc!=null;
@@ -715,7 +726,23 @@ function render(){
       const eFm=fidM(e.fid_inc||0,atk.fid_dec||0);
       const eDps=(eHit/80)*eCf*eDbd*eIr*eFm;
       const eTAA=(e.mg_atk||0)+(e.wg_atk||0)+(e.ms_atk||0);
-      if(atk.hp&&eTAA) theirKillRate=eDps*eTAA/atk.hp;
+      // Enemy drone DPS against us
+      const eBaseIR=(e.pvp_inc||0)+(e.dmg_inc||0)+eAreaAdj-(atk.pvp_red||0)-(atk.dmg_red||0);
+      const eTotalDmgBoost=e.drones.reduce((s,d)=>s+(d.dmgBoost||0),0);
+      const eAtkResist=atk.drones.reduce((s,d)=>s+(d.resistBoost||0),0);
+      const eTotalDroneDpsMul=e.drones.reduce((s,d)=>{
+        const ek=enhKey(d),dk=decKey(d);
+        const eDED=clamp((100+(e[ek]||0)+(d.etr||0)-(atk[dk]||0))/100,1,2);
+        const nairExtra=(wpType==='phys'?(d.physBoost||0):(d.energyBoost||0))+(d.naBoost||0);
+        const eDroneNaIR=F((eBaseIR+eTotalDmgBoost-eAtkResist+nairExtra)/100);
+        const eDroneSKIR=F((eBaseIR+eTotalDmgBoost-eAtkResist+(d.skillBoost||0))/100);
+        const eTR=1+(d.tr||0)/100;
+        const eSM=(d.skMult||0)/100;
+        const naFreq=1+(d.qr||0)/100;
+        const skFreq=eSM>0?(1+(d.cc||0)/100)/3:0;
+        return s+DSMCoeff*eDED*(eTR*eDroneNaIR*naFreq+eSM*eDroneSKIR*skFreq);
+      },0);
+      if(atk.hp&&eTAA) theirKillRate=(eDps+eTotalDroneDpsMul*eDbd*eFm)*eTAA/atk.hp;
     }
 
     return {e,ei,hit,cp,cf,dbd,ir,fm,slots,sed,hed,dps,myKillRate,theirKillRate,hasEO};
