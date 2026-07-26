@@ -15,7 +15,10 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "153562029937",
   appId:             "1:153562029937:web:8803c127fa85c6cb88e0d0"
 };
-const DB_PATH = "wf071926";
+const WEEKS = [
+  {id:'wf071926', label:'Jul 19 2026'},
+];
+let currentWeek = WEEKS[WEEKS.length - 1].id;
 </script>
 
 <script src="https://www.gstatic.com/firebasejs/12.16.0/firebase-app-compat.js"></script>
@@ -147,7 +150,13 @@ tr:hover td{background:var(--bg3);}
   ⚠ Firebase not configured. Edit <code>FIREBASE_CONFIG</code> at the top of this file with your project credentials, then reload.
 </div>
 
+<div id="weekReadOnly" style="display:none;background:#7c4d00;color:#ffe0a0;padding:6px 14px;font-size:12px;font-weight:600;text-align:center">
+  ⚠ Viewing historical week — changes will not be saved
+</div>
 <div class="controls">
+  <div class="cg"><label>War Week</label>
+    <select id="weekSel" onchange="switchWeek(this.value)"></select>
+  </div>
   <div class="cg"><label>Attacker</label>
     <select id="atkSel" onchange="loadAttacker(this.value)"></select>
   </div>
@@ -277,7 +286,8 @@ const ATK_TEMPLATES = {
 const ATK_DB = {};
 for(const [k,v] of Object.entries(ATK_TEMPLATES)) ATK_DB[k] = JSON.parse(JSON.stringify(v));
 
-const ENEMIES = [
+const WEEKS_SEED = {};
+WEEKS_SEED['wf071926'] = [
   {name:'Kage無双',      label:'B5',bp:64070540,mg_atk:350872,wg_atk:369408,ms_atk:421671,hp:1375878,crit:87.2,dodge:286.26,elec_enh:53,burn_enh:62.1,reflect_enh:54.2,crit_res:185.31,hit:264.58,elec_dec:110.6,burn_dec:105.7,reflect_dec:106.5,pdb:2729,pd:3384,edb:3385,ed:3037,fid_inc:10.4,fid_dec:42.8,sentinel_enh:39.8,sentinel_dec:31.6,heal_enh:97.9,heal_dec:196.1,dmg_inc:0,dmg_red:14,pvp_inc:39.55,pvp_red:39.75,aerial_inc:68.95,aerial_red:102.64,drones:[{name:'Fornax',level:140,type:'burn',resistBoost:0},{name:'Sagittarius',level:200,type:'burn',resistBoost:0},{name:'Lyra',level:144,type:'burn',resistBoost:0}]},
   {name:'撲殺の天使',    label:'B3',bp:63522768,mg_atk:338720,wg_atk:374628,ms_atk:370389,hp:1406927,crit:95.9,dodge:287.65,elec_enh:48,burn_enh:64,reflect_enh:44.6,crit_res:151.49,hit:254.72,elec_dec:100.5,burn_dec:106.1,reflect_dec:103.1,pdb:3188,pd:3170,edb:2693,ed:3020,fid_inc:8.8,fid_dec:40.3,sentinel_enh:38.8,sentinel_dec:155.4,heal_enh:125.4,heal_dec:102.6,dmg_inc:0,dmg_red:27,pvp_inc:37.05,pvp_red:36.45,aerial_inc:67.15,aerial_red:103.44,drones:[{name:'Sagittarius',level:200,type:'burn',resistBoost:0},{name:'Lyra',level:94,type:'burn',resistBoost:0},{name:'Fornax',level:166,type:'burn',resistBoost:0}]},
   {name:'ごまちゃん',    label:'B2',bp:56980788,mg_atk:327753,wg_atk:362246,ms_atk:359370,hp:1214504,crit:79.2,dodge:308.86,elec_enh:43,burn_enh:45.9,reflect_enh:43.7,crit_res:155.08,hit:194.9,elec_dec:123.16,burn_dec:97.3,reflect_dec:145.57,pdb:3108,pd:3119,edb:2566,ed:2606,fid_inc:7.1,fid_dec:30.0,sentinel_enh:28,sentinel_dec:22.4,heal_enh:213.2,heal_dec:135,dmg_inc:0,dmg_red:7,pvp_inc:39,pvp_red:38.65,aerial_inc:67.75,aerial_red:104.92,drones:[{name:'Draco',level:139,type:'elec',resistBoost:0},{name:'Aquila',level:164,type:'elec',resistBoost:0},{name:'Orion',level:139,type:'elec',resistBoost:0}]},
@@ -295,6 +305,11 @@ const ENEMIES = [
   {name:'ぽこはち',      label:'C4',bp:16978310,dodge:285.3, crit_res:194.03,fid_dec:28.7, burn_dec:83.8,  elec_dec:83.3,  reflect_dec:null,pvp_red:37.75,aerial_red:97.07, ground_red:null, pdb:2322,pd:2630,edb:null,ed:null,   sentinel_enh:null,heal_dec:73.2,sentinel_dec:null,hit:null,crit:null,pvp_inc:null,aerial_inc:null,ground_inc:null,drones:[{name:'Apus',level:128,type:'reflect',resistBoost:7},{name:'Grus',level:125,type:'reflect',resistBoost:4},{name:'Fornax',level:125,type:'burn',resistBoost:0}]},
   {name:'ポインター',    label:'C5',bp:385670,  dodge:null,  crit_res:null,  fid_dec:null, burn_dec:null,   elec_dec:null,   reflect_dec:null,pvp_red:null, aerial_red:null,  ground_red:null, pdb:null,pd:null,  edb:null,ed:null,   sentinel_enh:null,heal_dec:null, sentinel_dec:null,hit:null,crit:null,pvp_inc:null,aerial_inc:null,ground_inc:null,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
 ];
+
+function deepCloneSeed(weekId) {
+  return (WEEKS_SEED[weekId] || []).map(e => JSON.parse(JSON.stringify(e)));
+}
+let ENEMIES = deepCloneSeed(currentWeek);
 
 let currentAtk = 'jackclown';
 let expandedEnemy = null;
@@ -339,11 +354,71 @@ let db = null;
 let nickname = localStorage.getItem('wf_nickname') || '';
 let ignoreNextRemote = false; // suppress echo of own write
 let writeTimer = null;
+let activeListener = null; // DB_PATH currently subscribed
 
 function syncDot(cls, msg) {
   const dot = document.getElementById('syncDot');
   dot.className = 'sync-dot' + (cls?' '+cls:'');
   document.getElementById('syncMsg').textContent = msg;
+}
+
+function isCurrentWeek() {
+  return currentWeek === WEEKS[WEEKS.length - 1].id;
+}
+
+function attachFirebaseListener() {
+  if (!db) return;
+  if (activeListener) db.ref(activeListener).off('value');
+  activeListener = currentWeek;
+  syncDot('', 'Connecting…');
+
+  db.ref(currentWeek).on('value', snap => {
+    const data = snap.val();
+    if (!data) { syncDot('live', 'Live — no saved state yet'); return; }
+    if (ignoreNextRemote) { ignoreNextRemote = false; return; }
+
+    // Apply remote state — atkDB only for current week
+    if (isCurrentWeek() && data.atkDB) {
+      for (const [k,v] of Object.entries(data.atkDB)) {
+        if (ATK_DB[k]) Object.assign(ATK_DB[k], v);
+      }
+    }
+    if (data.enemies && Array.isArray(data.enemies)) {
+      // Replace ENEMIES in-place from remote
+      ENEMIES.length = 0;
+      data.enemies.forEach(e => ENEMIES.push(e));
+    }
+    buildAtkPanel();
+    buildDronePanel();
+    render();
+
+    const who = data.savedBy || 'teammate';
+    const when = data.savedAt ? new Date(data.savedAt).toLocaleTimeString() : '';
+    const roNote = isCurrentWeek() ? '' : ' · read-only';
+    syncDot('live', `Live · last saved by ${who} at ${when}${roNote}`);
+  }, err => {
+    syncDot('err', `Firebase error: ${err.message}`);
+  });
+}
+
+function switchWeek(weekId) {
+  if (weekId === currentWeek) return;
+  clearTimeout(writeTimer);
+  currentWeek = weekId;
+  // Reset ENEMIES to seed while Firebase loads
+  ENEMIES.length = 0;
+  deepCloneSeed(weekId).forEach(e => ENEMIES.push(e));
+  attachFirebaseListener();
+  render();
+  // Visual hint for historical weeks
+  document.getElementById('weekReadOnly').style.display = isCurrentWeek() ? 'none' : '';
+}
+
+function buildWeekSelector() {
+  const sel = document.getElementById('weekSel');
+  sel.innerHTML = WEEKS.map(w =>
+    `<option value="${w.id}"${w.id===currentWeek?' selected':''}>${w.label}</option>`
+  ).join('');
 }
 
 function initFirebase() {
@@ -355,42 +430,14 @@ function initFirebase() {
   try {
     firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.database();
-    syncDot('', 'Connecting…');
-
-    db.ref(DB_PATH).on('value', snap => {
-      const data = snap.val();
-      if (!data) { syncDot('live', 'Live — no saved state yet'); return; }
-
-      if (ignoreNextRemote) { ignoreNextRemote = false; return; }
-
-      // Apply remote state
-      if (data.atkDB) {
-        for (const [k,v] of Object.entries(data.atkDB)) {
-          if (ATK_DB[k]) Object.assign(ATK_DB[k], v);
-        }
-      }
-      if (data.enemies && Array.isArray(data.enemies)) {
-        data.enemies.forEach((saved,i) => {
-          if (ENEMIES[i] && saved.name === ENEMIES[i].name) Object.assign(ENEMIES[i], saved);
-        });
-      }
-      buildAtkPanel();
-      buildDronePanel();
-      render();
-
-      const who = data.savedBy || 'teammate';
-      const when = data.savedAt ? new Date(data.savedAt).toLocaleTimeString() : '';
-      syncDot('live', `Live · last saved by ${who} at ${when}`);
-    }, err => {
-      syncDot('err', `Firebase error: ${err.message}`);
-    });
-
+    attachFirebaseListener();
   } catch(e) {
     syncDot('err', `Firebase init failed: ${e.message}`);
   }
 }
 
 function scheduleWrite() {
+  if (!isCurrentWeek()) return; // historical weeks are read-only
   clearTimeout(writeTimer);
   syncDot('pending', 'Unsaved changes…');
   writeTimer = setTimeout(pushState, 800);
@@ -399,7 +446,7 @@ function scheduleWrite() {
 function pushState() {
   if (!db) return;
   ignoreNextRemote = true;
-  db.ref(DB_PATH).set({
+  db.ref(currentWeek).set({
     atkDB: ATK_DB,
     enemies: ENEMIES,
     savedBy: nickname || 'anonymous',
@@ -1008,6 +1055,7 @@ function showSimModal(atk,e,r){
 // ── Init ──
 if (!nickname) promptNickname();
 updateNicknameDisplay();
+buildWeekSelector();
 loadAttacker('jackclown');
 initFirebase();
 </script>
