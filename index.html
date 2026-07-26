@@ -109,6 +109,8 @@ tr:hover td{background:var(--bg3);}
 .expand-drone-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px;}
 .expand-drone-slot{background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:7px;}
 .expand-drone-slot h4{font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:5px;}
+/* drone-col visibility toggle */
+#mainTable.no-drone .drone-col{display:none;}
 /* legend */
 .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;margin-top:8px;}
 .legend-item{display:flex;align-items:center;gap:4px;}
@@ -154,6 +156,12 @@ tr:hover td{background:var(--bg3);}
   ⚠ Viewing historical week — changes will not be saved
 </div>
 <div class="controls">
+  <div class="cg"><label>Mode</label>
+    <select id="modeSel" onchange="setCalcMode(this.value)">
+      <option value="simple">Simple</option>
+      <option value="full">Full (Drones)</option>
+    </select>
+  </div>
   <div class="cg"><label>War Week</label>
     <select id="weekSel" onchange="switchWeek(this.value)"></select>
   </div>
@@ -211,9 +219,9 @@ tr:hover td{background:var(--bg3);}
           <th rowspan="2" title="F((pdb−pd)/1000) phys or F((edb−ed)/1000) energy">DBD</th>
           <th rowspan="2" title="F((pvp_inc+dmg_inc+WeaponIR+areaAdj−pvp_red−dmg_red)/100)">IR</th>
           <th rowspan="2" title="FID=100+fid_inc−fid_dec">FID</th>
-          <th colspan="3" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr0">Left-flank</th>
-          <th colspan="3" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr1">Defender</th>
-          <th colspan="3" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr2">Right-flank</th>
+          <th colspan="3" class="drone-col" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr0">Left-flank</th>
+          <th colspan="3" class="drone-col" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr1">Defender</th>
+          <th colspan="3" class="drone-col" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr2">Right-flank</th>
           <th rowspan="2" title="(100+sentinel_enh−sentinel_dec)/100">Sent</th>
           <th rowspan="2" title="max(0,(100+heal_enh−heal_dec)/100)">Heal</th>
           <th rowspan="2" title="(Hit/80)×CritF×DBD×IR×FID — relative">DPS</th>
@@ -222,15 +230,15 @@ tr:hover td{background:var(--bg3);}
           <th rowspan="2">Sim</th>
         </tr>
         <tr>
-          <th title="(100+enh−dec)/100 clamped [1,2]" style="border-left:1px solid var(--border)">ED</th>
-          <th title="F((pvp_inc−pvp_red+DroneNAIR)/100)">NA</th>
-          <th title="F((pvp_inc−pvp_red+DroneSKIR)/100)">SK</th>
-          <th title="(100+enh−dec)/100 clamped [1,2]" style="border-left:1px solid var(--border)">ED</th>
-          <th title="F((pvp_inc−pvp_red+DroneNAIR)/100)">NA</th>
-          <th title="F((pvp_inc−pvp_red+DroneSKIR)/100)">SK</th>
-          <th title="(100+enh−dec)/100 clamped [1,2]" style="border-left:1px solid var(--border)">ED</th>
-          <th title="F((pvp_inc−pvp_red+DroneNAIR)/100)">NA</th>
-          <th title="F((pvp_inc−pvp_red+DroneSKIR)/100)">SK</th>
+          <th class="drone-col" title="(100+enh−dec)/100 clamped [1,2]" style="border-left:1px solid var(--border)">ED</th>
+          <th class="drone-col" title="F((pvp_inc−pvp_red+DroneNAIR)/100)">NA</th>
+          <th class="drone-col" title="F((pvp_inc−pvp_red+DroneSKIR)/100)">SK</th>
+          <th class="drone-col" title="(100+enh−dec)/100 clamped [1,2]" style="border-left:1px solid var(--border)">ED</th>
+          <th class="drone-col" title="F((pvp_inc−pvp_red+DroneNAIR)/100)">NA</th>
+          <th class="drone-col" title="F((pvp_inc−pvp_red+DroneSKIR)/100)">SK</th>
+          <th class="drone-col" title="(100+enh−dec)/100 clamped [1,2]" style="border-left:1px solid var(--border)">ED</th>
+          <th class="drone-col" title="F((pvp_inc−pvp_red+DroneNAIR)/100)">NA</th>
+          <th class="drone-col" title="F((pvp_inc−pvp_red+DroneSKIR)/100)">SK</th>
         </tr>
       </thead>
       <tbody id="tableBody"></tbody>
@@ -313,6 +321,7 @@ let ENEMIES = deepCloneSeed(currentWeek);
 
 let currentAtk = 'jackclown';
 let expandedEnemy = null;
+let calcMode = 'simple'; // 'simple' | 'full'
 
 function nextInput(el){
   const sel='.sf input,.num';
@@ -412,6 +421,15 @@ function switchWeek(weekId) {
   render();
   // Visual hint for historical weeks
   document.getElementById('weekReadOnly').style.display = isCurrentWeek() ? 'none' : '';
+}
+
+function setCalcMode(m) {
+  calcMode = m;
+  document.getElementById('dronePanel').style.display = m === 'full' ? '' : 'none';
+  const tbl = document.getElementById('mainTable');
+  if (m === 'full') tbl.classList.remove('no-drone');
+  else tbl.classList.add('no-drone');
+  render();
 }
 
 function buildWeekSelector() {
@@ -667,12 +685,15 @@ function buildExpandRow(ei){
       </div>
     </div>`;
 
-  return `<tr class="expand-row" id="expand-${ei}"><td colspan="24">
+  const droneSection=calcMode==='full'?`
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 4px;">Enemy Drone Lineup</div>
+      <div class="expand-drone-grid">${droneSlots}</div>`:'';
+  const colspan=calcMode==='full'?24:15;
+  return `<tr class="expand-row" id="expand-${ei}"><td colspan="${colspan}">
     <div class="expand-body">
       ${identity}
       <div class="expand-grid">${grid}</div>
-      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 4px;">Enemy Drone Lineup</div>
-      <div class="expand-drone-grid">${droneSlots}</div>
+      ${droneSection}
     </div>
   </td></tr>`;
 }
@@ -756,7 +777,7 @@ function render(){
       const droneDpsMul=DSMCoeff*(ed??1)*(tr*naIR*naFreq*naCritF+sm*skIR*skFreq);
       return {ed,na,sk,hasSkMult,droneDpsMul};
     });
-    const totalDroneDpsMul=slots.reduce((s,sl)=>s+sl.droneDpsMul,0);
+    const totalDroneDpsMul=calcMode==='full'?slots.reduce((s,sl)=>s+sl.droneDpsMul,0):0;
 
     // TTK: your kills on them (weapons + drones; titan multiplies your effective TAA)
     const atkTAA=titanMul*((atk.mg_atk||0)+(atk.wg_atk||0)+(atk.ms_atk||0));
@@ -799,7 +820,7 @@ function render(){
         const naCritF=1+(d.sw||0)/100*((200+(d.ra||0))/100-1);
         return s+DSMCoeff*eDED*(eTR*eDroneNaIR*naFreq*naCritF+eSM*eDroneSKIR*skFreq);
       },0);
-      if(atk.hp&&eTAA) theirKillRate=(eDps+eTotalDroneDpsMul*eDbd*eFm)*eTAA/atk.hp;
+      if(atk.hp&&eTAA) theirKillRate=(eDps+(calcMode==='full'?eTotalDroneDpsMul:0)*eDbd*eFm)*eTAA/atk.hp;
     }
 
     return {e,ei,hit,cp,cf,dbd,ir,fm,slots,sed,hed,dps,myKillRate,theirKillRate,hasEO};
@@ -816,10 +837,10 @@ function render(){
     const bw=Math.round((dps/maxDps)*100);
     const dc=dps/maxDps>=0.8?'good':dps/maxDps>=0.6?'ok':dps/maxDps>=0.4?'bad':'vbad';
     const expanded=expandedEnemy===ei;
-    const droneCols=slots.map(s=>`
+    const droneCols=calcMode==='full'?slots.map(s=>`
       <td style="border-left:1px solid var(--border)" class="${s.ed==null?'':colorM(s.ed,[1.3,1.1,1.0])}">${fmtNull(s.ed)}</td>
       <td class="${colorM(s.na)}">${s.na.toFixed(3)}</td>
-      <td class="${colorM(s.sk)}" title="${s.hasSkMult?'SK×SkMult':'SK (SkMult not set)'}">${s.sk.toFixed(3)}</td>`).join('');
+      <td class="${colorM(s.sk)}" title="${s.hasSkMult?'SK×SkMult':'SK (SkMult not set)'}">${s.sk.toFixed(3)}</td>`).join(''):'';
 
     // TTK columns
     const myTTKw=myKillRate&&maxMyKR?Math.round((myKillRate/maxMyKR)*100):0;
@@ -1056,6 +1077,9 @@ function showSimModal(atk,e,r){
 if (!nickname) promptNickname();
 updateNicknameDisplay();
 buildWeekSelector();
+// Apply default simple mode
+document.getElementById('dronePanel').style.display = 'none';
+document.getElementById('mainTable').classList.add('no-drone');
 loadAttacker('jackclown');
 initFirebase();
 </script>
