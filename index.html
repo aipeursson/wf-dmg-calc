@@ -16,8 +16,8 @@ const FIREBASE_CONFIG = {
   appId:             "1:153562029937:web:8803c127fa85c6cb88e0d0"
 };
 const WEEKS = [
-  {id:'wf071926', label:'Jul 19 2026'},
-  {id:'wf072626', label:'Jul 26 2026'},
+  {id:'wf071926', label:'Jul 19 2026', clan:'野生の王国'},
+  {id:'wf072626', label:'Jul 26 2026', clan:'ALBATROSS'},
 ];
 let currentWeek = WEEKS[WEEKS.length - 1].id;
 </script>
@@ -139,7 +139,7 @@ tr:hover td{background:var(--bg3);}
 </div>
 
 <header>
-  <div><h1>⚔ WF 071926 – Damage Calculator</h1><div class="sub">The Astral Vanguard vs 野生の王国</div></div>
+  <div><h1 id="pageTitle">⚔ WF 071926 – Damage Calculator</h1><div class="sub" id="pageSubtitle">The Astral Vanguard vs 野生の王国</div></div>
 </header>
 
 <div class="sync-bar">
@@ -429,10 +429,19 @@ function attachFirebaseListener() {
   });
 }
 
+function updateHeader() {
+  const w = WEEKS.find(w => w.id === currentWeek);
+  const label = w.id.slice(2); // e.g. "072626"
+  document.getElementById('pageTitle').textContent = `⚔ WF ${label} – Damage Calculator`;
+  document.getElementById('pageSubtitle').textContent = `The Astral Vanguard vs ${w.clan}`;
+  document.title = `WF ${label} – Damage Calculator`;
+}
+
 function switchWeek(weekId) {
   if (weekId === currentWeek) return;
   clearTimeout(writeTimer);
   currentWeek = weekId;
+  updateHeader();
   // Reset ENEMIES to seed while Firebase loads
   ENEMIES.length = 0;
   deepCloneSeed(weekId).forEach(e => ENEMIES.push(e));
@@ -1096,6 +1105,7 @@ function showSimModal(atk,e,r){
 if (!nickname) promptNickname();
 updateNicknameDisplay();
 buildWeekSelector();
+updateHeader();
 // Apply default simple mode
 document.getElementById('dronePanel').style.display = 'none';
 document.getElementById('mainTable').classList.add('no-drone');
