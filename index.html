@@ -1101,6 +1101,26 @@ function showSimModal(atk,e,r){
   m.style.display='flex';
 }
 
+// ── Select-on-focus + Escape-to-revert (Excel-style) ──
+document.addEventListener('focusin', e => {
+  const t = e.target;
+  if (t.tagName === 'INPUT' && t.type !== 'checkbox') {
+    t.select();
+    t._escVal = t.value;
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const t = e.target;
+    if (t.tagName === 'INPUT' && t.type !== 'checkbox' && t._escVal !== undefined) {
+      t.value = t._escVal;
+      t.dispatchEvent(new Event('input'));
+      t.blur();
+      e.preventDefault();
+    }
+  }
+});
+
 // ── Init ──
 if (!nickname) promptNickname();
 updateNicknameDisplay();
