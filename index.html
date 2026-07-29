@@ -175,9 +175,6 @@ tr:hover td{background:var(--bg3);}
       <option value="energy">Energy</option>
     </select>
   </div>
-  <div class="cg"><label>Crit mult%</label>
-    <input class="num" id="critMult" value="200" min="100" max="400" step="5" oninput="render()">
-  </div>
   <div class="cg"><label>vs enemy type</label>
     <select id="enemyType" onchange="render()">
       <option value="aerial">Aerial</option>
@@ -216,7 +213,7 @@ tr:hover td{background:var(--bg3);}
           <th rowspan="2">BP</th>
           <th rowspan="2" title="min(80,max(20,100+hit−dodge))">Hit%</th>
           <th rowspan="2" title="min(80,max(0,crit−crit_res))">Crit%</th>
-          <th rowspan="2" title="1+(crit%/100)*(critMult/100−1)">CritF</th>
+          <th rowspan="2" title="weighted crit factor per weapon using global+local crit dmg">CritF</th>
           <th rowspan="2" title="F((pdb−pd)/1000) phys or F((edb−ed)/1000) energy">DBD</th>
           <th rowspan="2" title="F((pvp_inc+dmg_inc+WeaponIR+areaAdj−pvp_red−dmg_red)/100)">IR</th>
           <th rowspan="2" title="FID=100+fid_inc−fid_dec">FID</th>
@@ -579,6 +576,9 @@ const ATK_FIELDS=[
   ['crit_res','Crit Resistance'],
   ['mg_crit','MG Crit Rate'],['wg_crit','WG Crit Rate'],['ms_crit','MS Crit Rate'],
   ['mg_crit_res','MG Crit Res'],['wg_crit_res','WG Crit Res'],['ms_crit_res','MS Crit Res'],
+  ['crit_dmg','Crit Dmg %'],['crit_dmg_res','Crit Dmg Res %'],
+  ['mg_crit_dmg','MG Crit Dmg %'],['wg_crit_dmg','WG Crit Dmg %'],['ms_crit_dmg','MS Crit Dmg %'],
+  ['mg_crit_dmg_res','MG Crit Dmg Res %'],['wg_crit_dmg_res','WG Crit Dmg Res %'],['ms_crit_dmg_res','MS Crit Dmg Res %'],
   ['hit','Hit Rate'],
   ['elec_dec','Elec Dec %'],['burn_dec','Burn Dec %'],['reflect_dec','Reflect Dec %'],
   ['pdb','Phys Dmg Break'],['pd','Phys Defense'],['edb','Energy Dmg Break'],['ed','Energy Defense'],
@@ -657,6 +657,9 @@ const ENEMY_FIELDS=[
   ['crit_res','Crit Resistance'],
   ['mg_crit','MG Crit Rate'],['wg_crit','WG Crit Rate'],['ms_crit','MS Crit Rate'],
   ['mg_crit_res','MG Crit Res'],['wg_crit_res','WG Crit Res'],['ms_crit_res','MS Crit Res'],
+  ['crit_dmg','Crit Dmg %'],['crit_dmg_res','Crit Dmg Res %'],
+  ['mg_crit_dmg','MG Crit Dmg %'],['wg_crit_dmg','WG Crit Dmg %'],['ms_crit_dmg','MS Crit Dmg %'],
+  ['mg_crit_dmg_res','MG Crit Dmg Res %'],['wg_crit_dmg_res','WG Crit Dmg Res %'],['ms_crit_dmg_res','MS Crit Dmg Res %'],
   ['hit','Hit Rate'],
   ['elec_dec','Elec Dec %'],['burn_dec','Burn Dec %'],['reflect_dec','Reflect Dec %'],
   ['pdb','Phys Dmg Break'],['pd','Phys Defense'],['edb','Eng Dmg Break'],['ed','Eng Defense'],
@@ -753,7 +756,6 @@ function fmtNull(v,d=3){return v==null?'<span style="color:var(--muted)">—</sp
 function render(){
   const atk=ATK_DB[currentAtk];
   const wpType=document.getElementById('wpType').value;
-  const critMul=parseFloat(document.getElementById('critMult').value)||200;
   const enemyType=document.getElementById('enemyType').value;
 
   // Update slot header labels with current drone names
@@ -778,7 +780,11 @@ function render(){
     const cp_wg=cpW(atk.wg_crit||0,e.wg_crit_res||0);
     const cp_ms=cpW(atk.ms_crit||0,e.ms_crit_res||0);
     const cp=Math.round(WMG*cp_mg+WWG*cp_wg+WMS*cp_ms);
-    const cf=WMG*(1+(cp_mg/100)*(critMul/100-1))+WWG*(1+(cp_wg/100)*(critMul/100-1))+WMS*(1+(cp_ms/100)*(critMul/100-1));
+    const cdW=(ld,lr)=>(atk.crit_dmg||200)-(e.crit_dmg_res||0)+ld-lr;
+    const cd_mg=cdW(atk.mg_crit_dmg||0,e.mg_crit_dmg_res||0);
+    const cd_wg=cdW(atk.wg_crit_dmg||0,e.wg_crit_dmg_res||0);
+    const cd_ms=cdW(atk.ms_crit_dmg||0,e.ms_crit_dmg_res||0);
+    const cf=WMG*(1+(cp_mg/100)*(cd_mg/100-1))+WWG*(1+(cp_wg/100)*(cd_wg/100-1))+WMS*(1+(cp_ms/100)*(cd_ms/100-1));
     const dbd=wpType==='phys'?F((atk.pdb-(e.pd||0))/1000):F((atk.edb-(e.ed||e.edb||0))/1000);
     // Aerial/ground adjustment goes INSIDE F() per PDF §2.2
     const areaAdj=enemyType==='aerial'?(atk.aerial_inc||0)-(e.aerial_red||0):
@@ -830,7 +836,11 @@ function render(){
       const eCp_wg=eCpW(e.wg_crit||0,atk.wg_crit_res||0);
       const eCp_ms=eCpW(e.ms_crit||0,atk.ms_crit_res||0);
       const eCp=Math.round(WMG*eCp_mg+WWG*eCp_wg+WMS*eCp_ms);
-      const eCf=WMG*(1+(eCp_mg/100)*(critMul/100-1))+WWG*(1+(eCp_wg/100)*(critMul/100-1))+WMS*(1+(eCp_ms/100)*(critMul/100-1));
+      const eCdW=(ld,lr)=>(e.crit_dmg||200)-(atk.crit_dmg_res||0)+ld-lr;
+      const eCd_mg=eCdW(e.mg_crit_dmg||0,atk.mg_crit_dmg_res||0);
+      const eCd_wg=eCdW(e.wg_crit_dmg||0,atk.wg_crit_dmg_res||0);
+      const eCd_ms=eCdW(e.ms_crit_dmg||0,atk.ms_crit_dmg_res||0);
+      const eCf=WMG*(1+(eCp_mg/100)*(eCd_mg/100-1))+WWG*(1+(eCp_wg/100)*(eCd_wg/100-1))+WMS*(1+(eCp_ms/100)*(eCd_ms/100-1));
       const eDbd=wpType==='phys'?F(((e.pdb||0)-(atk.pd||0))/1000):F(((e.edb||e.pdb||0)-(atk.ed||0))/1000);
       const eAreaAdj=enemyType==='aerial'?(e.aerial_inc||0)-(atk.aerial_red||0):
                      enemyType==='ground'?(e.ground_inc||0)-(atk.ground_red||0):0;
@@ -925,7 +935,7 @@ const WP_BASE_CD={mg:0.96,wg:1.6,ms:4.0};
 const WP_COEFF_VAL={mg:0.07575,wg:0.09,ms:0.225};
 
 function buildSimData(shooter,target,cfg){
-  const {wpType,critMul,enemyType,shooterTitan,titanMul}=cfg;
+  const {wpType,enemyType,shooterTitan,titanMul}=cfg;
   const tM=shooterTitan?titanMul:1;
   const dbd=wpType==='phys'?F(((shooter.pdb||0)-(target.pd||0))/1000):F(((shooter.edb||0)-(target.ed||target.edb||0))/1000);
   const areaAdj=enemyType==='aerial'?(shooter.aerial_inc||0)-(target.aerial_red||0):enemyType==='ground'?(shooter.ground_inc||0)-(target.ground_red||0):0;
@@ -944,7 +954,8 @@ function buildSimData(shooter,target,cfg){
     const critP=Math.min(80,Math.max(0,gC+lC));
     const base=WP_COEFF_VAL[w]*wAtk*dbd*ir*fm;
     const cd=WP_BASE_CD[w]/(1+(shooter[w+'_spd']||0)/100);
-    weapons[w]={hitP,critP,base,crit:base*critMul/100,cd};
+    const critDmgPct=(shooter.crit_dmg||200)-(target.crit_dmg_res||0)+(shooter[w+'_crit_dmg']||0)-(target[w+'_crit_dmg_res']||0);
+    weapons[w]={hitP,critP,base,crit:base*critDmgPct/100,cd};
   }
 
   const enhKey=d=>d.type==='burn'?'burn_enh':d.type==='elec'?'elec_enh':'reflect_enh';
@@ -1051,10 +1062,9 @@ function runSim(ei){
   const e=ENEMIES[ei],atk=ATK_DB[currentAtk];
   if(!atk.hp||!e.hp)return alert('Enter HP for both attacker and enemy first.');
   const wpType=document.getElementById('wpType').value;
-  const critMul=parseFloat(document.getElementById('critMult').value)||200;
   const enemyType=document.getElementById('enemyType').value;
   const titanMul=document.getElementById('titanGear').checked?1.3:1;
-  const cfg={wpType,critMul,enemyType,titanMul};
+  const cfg={wpType,enemyType,titanMul};
   const aD=buildSimData(atk,e,{...cfg,shooterTitan:true});
   const dD=buildSimData(e,atk,{...cfg,shooterTitan:false});
   let aW=0,dW=0,draws=0,tlN=0;
