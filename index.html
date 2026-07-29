@@ -312,7 +312,11 @@ const ATK_TEMPLATES = {
 };
 
 const ATK_DB = {};
-for(const [k,v] of Object.entries(ATK_TEMPLATES)) ATK_DB[k] = JSON.parse(JSON.stringify(v));
+for(const [k,v] of Object.entries(ATK_TEMPLATES)){
+  const entry=JSON.parse(JSON.stringify(v));
+  if(entry.crit_dmg==null) entry.crit_dmg=200;
+  ATK_DB[k]=entry;
+}
 
 const WEEKS_SEED = {};
 WEEKS_SEED['wf071926'] = [
