@@ -2,11 +2,11 @@
 
 ## Screenshot scans
 
-Enemy screenshots show an Attributes Comparison popup with **two sides**:
-- **Left side**: jackclown's stats (the user's own character)
-- **Right side**: the enemy's stats
+Attributes Comparison screenshots show a popup with **two columns**:
+- **Left column** (blue bar): jackclown's stats
+- **Right column** (red bar): the opponent's stats — either an enemy (different legion) or a teammate (same legion)
 
-When scanning a folder of screenshots, extract and save jackclown's values **once** (they repeat identically across all enemies in the same war week). Store them separately from the enemy array — e.g. as a top-level `"player"` object in the output JSON.
+Extract **both columns** from every screen. Store jackclown's values in a top-level `"player"` object; store opponents in an `"opponents"` array with `type: "enemy"` or `type: "teammate"`. Use the **wf-scan** agent (`.claude/agents/wf-scan.md`) for all screenshot ingestion.
 
 ## Output JSON structure
 
@@ -25,27 +25,29 @@ When scanning a folder of screenshots, extract and save jackclown's values **onc
 }
 ```
 
-## Enemy data schema (per enemy)
+## Opponent data schema
 
-Fields to extract for each enemy:
+Each opponent (enemy or teammate) has 9 screenshot screens. Use the **wf-scan** agent (`.claude/agents/wf-scan.md`) to extract all fields from both columns. The complete field set:
 
-**Basic:** `bp`, `mg_atk`, `wg_atk`, `ms_atk`, `hp`
+**Screen 1 — Basic (integers):** `bp`, `mg_atk`, `wg_atk`, `ms_atk`, `hp`
 
-**Battle attrs 1:** `crit`, `dodge`, `elec_enh`, `burn_enh`, `reflect_enh`
+**Screen 2 — Battle 1 (%):** `crit`, `dodge`, `elec_enh`, `burn_enh`, `reflect_enh`
 
-**Battle attrs 2:** `crit_res`, `hit`, `elec_dec`, `burn_dec`, `reflect_dec`
+**Screen 3 — Battle 2 (%):** `crit_res`, `hit`, `elec_dec`, `burn_dec`, `reflect_dec`
 
-**Special attrs 1:** `pdb`, `pd`, `edb`, `ed`, `fid_inc`, `fid_dec`
+**Screen 4 — Special 1 (integers + %):** `pdb`, `pd`, `edb`, `ed`, `fid_inc`, `fid_dec`
 
-**Special attrs 2:** `sentinel_enh`, `sentinel_dec`, `heal_enh`, `heal_dec`, `dmg_inc`, `dmg_red`
+**Screen 5 — Special 2 (%):** `sentinel_enh`, `sentinel_dec`, `heal_enh`, `heal_dec`, `dmg_inc`, `dmg_red`
 
-**PvP / aerial:** `pvp_inc`, `pvp_red`, `aerial_inc`, `aerial_red`
+**Screen 6 — PvP/Aerial/Ground (%):** `pvp_inc`, `pvp_red`, `aerial_inc`, `aerial_red`, `ground_inc`, `ground_red`
 
-**Per-weapon crit (added by wf-crit-scan):** `mg_crit` *(only if visible in screenshots)*, `mg_crit_res`, `wg_crit`, `wg_crit_res`, `ms_crit`, `ms_crit_res`, `mg_crit_dmg`, `mg_crit_dmg_res`, `wg_crit_dmg`, `wg_crit_dmg_res`, `ms_crit_dmg`, `ms_crit_dmg_res`
+**Screen 7 — Per-weapon attack rates + global crit (%):** `mg_atk_rate`, `wg_atk_rate`, `ms_atk_rate`, `crit_dmg`, `crit_dmg_res`, `mg_crit`
 
-**Meta:** `name`, `label` (grid position, filled in later from battle board), `drones` (3 slots, filled in later)
+**Screen 8 — Per-weapon crit 1 (%):** `mg_crit_res`, `wg_crit`, `wg_crit_res`, `ms_crit`, `ms_crit_res`, `mg_crit_dmg`
 
-Each enemy has ~9 screenshots: 6 core stat screens + 3 per-weapon detail screens. The per-weapon detail screens are handled by the **wf-crit-scan** agent (see `.claude/agents/wf-crit-scan.md`).
+**Screen 9 — Per-weapon crit 2 (%):** `mg_crit_dmg_res`, `wg_crit_dmg`, `wg_crit_dmg_res`, `ms_crit_dmg`, `ms_crit_dmg_res`
+
+**Meta:** `name`, `legion`, `type` (`"enemy"` or `"teammate"`), `label` (grid position, filled later), `drones` (3 slots, filled later)
 
 ## Calculator structure
 
