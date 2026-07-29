@@ -29,7 +29,7 @@ Every stat row has the format:
 - **Left column** (blue bar) = jackclown's stat → store under `player`
 - **Right column** (red bar) = opponent's stat → store under `opponent`
 
-Extract **both** values for every row. Never read only one side.
+**Extract jackclown's left-column values once** — from the first opponent's screenshots only. They are identical across all opponents in the same war week; do not re-read them for each opponent. Always extract the right column for every opponent.
 
 ---
 
@@ -187,7 +187,7 @@ If "Maingun crit rate" is the first row (screenshot scrolled slightly higher tha
 
 4. **Determine `type`** for each opponent: `"teammate"` if their legion matches jackclown's, `"enemy"` otherwise.
 
-5. **Assemble the player object** from the left-column values. All screens contribute left-column values — use the first complete reading. If jackclown's BP changed mid-session (can happen if they leveled up), note it and use the most recent BP.
+5. **Assemble the player object once.** Extract jackclown's left-column values from the first opponent's complete set of screens (all 9 screens). Do not re-read jackclown's values from subsequent opponents — they are identical for the entire war week. If jackclown's BP changed mid-session (visible as a different "My Power" number), note it and use the most recent value.
 
 6. **Write output JSON**:
 
