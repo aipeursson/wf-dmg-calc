@@ -220,32 +220,32 @@ tr.mu-loss>td:first-child{border-left:3px solid var(--red);}
         <tr>
           <th rowspan="2" id="th-name" class="sortable" onclick="sortBy('name')">Enemy</th>
           <th rowspan="2" id="th-bp" class="sortable" onclick="sortBy('bp')">BP</th>
-          <th rowspan="2" id="th-hit" class="sortable" onclick="sortBy('hit')" title="min(80,max(20,100+hit−dodge))">Hit%</th>
-          <th rowspan="2" id="th-cp" class="sortable" onclick="sortBy('cp')" title="min(80,max(0,crit−crit_res))">Crit%</th>
-          <th rowspan="2" id="th-cf" class="sortable" onclick="sortBy('cf')" title="weighted crit factor per weapon using global+local crit dmg">CritF</th>
-          <th rowspan="2" id="th-dbd" class="sortable" onclick="sortBy('dbd')" title="F((pdb−pd)/1000) phys or F((edb−ed)/1000) energy">DBD</th>
-          <th rowspan="2" id="th-ir" class="sortable" onclick="sortBy('ir')" title="F((pvp_inc+dmg_inc+WeaponIR+areaAdj−pvp_red−dmg_red)/100)">IR</th>
-          <th rowspan="2" id="th-fm" class="sortable" onclick="sortBy('fm')" title="FID=100+fid_inc−fid_dec">FID</th>
+          <th rowspan="2" id="th-hit" class="sortable" onclick="sortBy('hit')" title="Hit chance (capped 20–80%). Your hit rate minus enemy dodge rate. 65%+ is favorable (green). Formula: min(80, max(20, 100+hit−dodge))">Hit%</th>
+          <th rowspan="2" id="th-cp" class="sortable" onclick="sortBy('cp')" title="Effective crit rate (capped 0–80%). Your crit rate minus enemy crit resistance. Higher = more crits land. Formula: min(80, max(0, crit−crit_res))">Crit%</th>
+          <th rowspan="2" id="th-cf" class="sortable" onclick="sortBy('cf')" title="Crit damage multiplier (≥1.0). Blends per-weapon crit rates and crit damage bonuses. 1.0 = crits give no extra damage; 2.0 = every hit is a full double-damage crit.">CritF</th>
+          <th rowspan="2" id="th-dbd" class="sortable" onclick="sortBy('dbd')" title="Defense break ratio. Your pdb vs. their pd (physical) or edb vs. ed (energy), via game formula. &gt;1.0 = you pierce their defense; &lt;1.0 = their defense resists you.">DefBrk</th>
+          <th rowspan="2" id="th-ir" class="sortable" onclick="sortBy('ir')" title="Damage incident ratio (net damage modifier). Your PvP + dmg_inc + weapon/area bonuses minus their PvP &amp; dmg_red reductions. &gt;1.0 = net damage boost against this enemy.">DmgMod</th>
+          <th rowspan="2" id="th-fm" class="sortable" onclick="sortBy('fm')" title="Final damage multiplier. (100 + your fid_inc − fid_dec) / 100. Applied after all other multipliers — affects your total damage output. &gt;1.0 is beneficial.">FinalD</th>
           <th colspan="3" class="drone-col" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr0">Left-flank</th>
           <th colspan="3" class="drone-col" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr1">Defender</th>
           <th colspan="3" class="drone-col" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr2">Right-flank</th>
-          <th rowspan="2" id="th-sent" class="sortable" onclick="sortBy('sent')" title="(100+sentinel_enh−sentinel_dec)/100">Sent</th>
-          <th rowspan="2" id="th-heal" class="sortable" onclick="sortBy('heal')" title="max(0,(100+heal_enh−heal_dec)/100)">Heal</th>
-          <th rowspan="2" id="th-dps" class="sortable" onclick="sortBy('dps')" title="(Hit/80)×CritF×DBD×IR×FID — relative">DPS</th>
-          <th rowspan="2" id="th-myttk" class="sortable" onclick="sortBy('myttk')" title="enemy HP ÷ (DPS × your TAA) — green = fast kill">TTK↓</th>
-          <th rowspan="2" id="th-theirtk" class="sortable" onclick="sortBy('theirtk')" title="your HP ÷ (enemy DPS × enemy TAA) — green = they kill you slowly">TTK↑</th>
+          <th rowspan="2" id="th-sent" class="sortable" onclick="sortBy('sent')" title="Sentinel skill multiplier. (100 + your sentinel_enh − enemy sentinel_dec) / 100. &gt;1.0 = your sentinel hits harder against them; &lt;1.0 = their sentinel resistance reduces your damage.">Sent</th>
+          <th rowspan="2" id="th-heal" class="sortable" onclick="sortBy('heal')" title="Heal effectiveness multiplier. (100 + your heal_enh − enemy heal_dec) / 100. &gt;1.0 = your heals restore more HP against this enemy.">Heal</th>
+          <th rowspan="2" id="th-dps" class="sortable" onclick="sortBy('dps')" title="Relative damage index: Hit% × CritF × DefBrk × DmgMod × FinalD. Not real damage values — use it to compare which enemies you hit hardest or softest.">DPS</th>
+          <th rowspan="2" id="th-myttk" class="sortable" onclick="sortBy('myttk')" title="Time-to-kill (you → enemy). Enemy HP ÷ (your DPS × your total attack power). Smaller number = you kill them faster. Green = you kill them &gt;25% faster than they kill you.">TTK↓</th>
+          <th rowspan="2" id="th-theirtk" class="sortable" onclick="sortBy('theirtk')" title="Survivability (enemy → you). Your HP ÷ (enemy DPS × their total attack power). Larger number = they take longer to kill you. Green = they kill you &gt;25% slower than you kill them.">TTK↑</th>
           <th rowspan="2">Sim</th>
         </tr>
         <tr>
-          <th class="drone-col" title="(100+enh−dec)/100 clamped [1,2]" style="border-left:1px solid var(--border)">ED</th>
-          <th class="drone-col" title="F((pvp_inc−pvp_red+DroneNAIR)/100)">NA</th>
-          <th class="drone-col" title="F((pvp_inc−pvp_red+DroneSKIR)/100)">SK</th>
-          <th class="drone-col" title="(100+enh−dec)/100 clamped [1,2]" style="border-left:1px solid var(--border)">ED</th>
-          <th class="drone-col" title="F((pvp_inc−pvp_red+DroneNAIR)/100)">NA</th>
-          <th class="drone-col" title="F((pvp_inc−pvp_red+DroneSKIR)/100)">SK</th>
-          <th class="drone-col" title="(100+enh−dec)/100 clamped [1,2]" style="border-left:1px solid var(--border)">ED</th>
-          <th class="drone-col" title="F((pvp_inc−pvp_red+DroneNAIR)/100)">NA</th>
-          <th class="drone-col" title="F((pvp_inc−pvp_red+DroneSKIR)/100)">SK</th>
+          <th class="drone-col" title="Element damage multiplier. (100 + your element enh − enemy element dec) / 100, capped at 2×. &gt;1.0 if your drone's element type is effective against this enemy." style="border-left:1px solid var(--border)">ED</th>
+          <th class="drone-col" title="Drone normal-attack damage ratio. Your PvP + dmg boosts minus enemy PvP reductions, plus this drone's normal-attack IR bonus.">NA</th>
+          <th class="drone-col" title="Drone skill damage ratio. Your PvP + dmg boosts minus enemy PvP reductions, plus this drone's skill IR bonus.">SK</th>
+          <th class="drone-col" title="Element damage multiplier. (100 + your element enh − enemy element dec) / 100, capped at 2×. &gt;1.0 if your drone's element type is effective against this enemy." style="border-left:1px solid var(--border)">ED</th>
+          <th class="drone-col" title="Drone normal-attack damage ratio. Your PvP + dmg boosts minus enemy PvP reductions, plus this drone's normal-attack IR bonus.">NA</th>
+          <th class="drone-col" title="Drone skill damage ratio. Your PvP + dmg boosts minus enemy PvP reductions, plus this drone's skill IR bonus.">SK</th>
+          <th class="drone-col" title="Element damage multiplier. (100 + your element enh − enemy element dec) / 100, capped at 2×. &gt;1.0 if your drone's element type is effective against this enemy." style="border-left:1px solid var(--border)">ED</th>
+          <th class="drone-col" title="Drone normal-attack damage ratio. Your PvP + dmg boosts minus enemy PvP reductions, plus this drone's normal-attack IR bonus.">NA</th>
+          <th class="drone-col" title="Drone skill damage ratio. Your PvP + dmg boosts minus enemy PvP reductions, plus this drone's skill IR bonus.">SK</th>
         </tr>
       </thead>
       <tbody id="tableBody"></tbody>
