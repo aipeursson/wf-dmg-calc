@@ -116,6 +116,15 @@ tr:hover td{background:var(--bg3);}
 .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;margin-top:8px;}
 .legend-item{display:flex;align-items:center;gap:4px;}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+/* sortable headers */
+th.sortable{cursor:pointer;user-select:none;}
+th.sortable:hover{color:var(--text);}
+th.sort-asc::after{content:' ▲';opacity:.6;font-size:9px;}
+th.sort-desc::after{content:' ▼';opacity:.6;font-size:9px;}
+/* matchup row stripe on first cell */
+tr.mu-win>td:first-child{border-left:3px solid var(--green);}
+tr.mu-even>td:first-child{border-left:3px solid var(--yellow);}
+tr.mu-loss>td:first-child{border-left:3px solid var(--red);}
 /* nickname modal */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;}
 .modal{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px;min-width:280px;max-width:340px;}
@@ -209,22 +218,22 @@ tr:hover td{background:var(--bg3);}
     <table id="mainTable">
       <thead>
         <tr>
-          <th rowspan="2">Enemy</th>
-          <th rowspan="2">BP</th>
-          <th rowspan="2" title="min(80,max(20,100+hit−dodge))">Hit%</th>
-          <th rowspan="2" title="min(80,max(0,crit−crit_res))">Crit%</th>
-          <th rowspan="2" title="weighted crit factor per weapon using global+local crit dmg">CritF</th>
-          <th rowspan="2" title="F((pdb−pd)/1000) phys or F((edb−ed)/1000) energy">DBD</th>
-          <th rowspan="2" title="F((pvp_inc+dmg_inc+WeaponIR+areaAdj−pvp_red−dmg_red)/100)">IR</th>
-          <th rowspan="2" title="FID=100+fid_inc−fid_dec">FID</th>
+          <th rowspan="2" id="th-name" class="sortable" onclick="sortBy('name')">Enemy</th>
+          <th rowspan="2" id="th-bp" class="sortable" onclick="sortBy('bp')">BP</th>
+          <th rowspan="2" id="th-hit" class="sortable" onclick="sortBy('hit')" title="min(80,max(20,100+hit−dodge))">Hit%</th>
+          <th rowspan="2" id="th-cp" class="sortable" onclick="sortBy('cp')" title="min(80,max(0,crit−crit_res))">Crit%</th>
+          <th rowspan="2" id="th-cf" class="sortable" onclick="sortBy('cf')" title="weighted crit factor per weapon using global+local crit dmg">CritF</th>
+          <th rowspan="2" id="th-dbd" class="sortable" onclick="sortBy('dbd')" title="F((pdb−pd)/1000) phys or F((edb−ed)/1000) energy">DBD</th>
+          <th rowspan="2" id="th-ir" class="sortable" onclick="sortBy('ir')" title="F((pvp_inc+dmg_inc+WeaponIR+areaAdj−pvp_red−dmg_red)/100)">IR</th>
+          <th rowspan="2" id="th-fm" class="sortable" onclick="sortBy('fm')" title="FID=100+fid_inc−fid_dec">FID</th>
           <th colspan="3" class="drone-col" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr0">Left-flank</th>
           <th colspan="3" class="drone-col" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr1">Defender</th>
           <th colspan="3" class="drone-col" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr2">Right-flank</th>
-          <th rowspan="2" title="(100+sentinel_enh−sentinel_dec)/100">Sent</th>
-          <th rowspan="2" title="max(0,(100+heal_enh−heal_dec)/100)">Heal</th>
-          <th rowspan="2" title="(Hit/80)×CritF×DBD×IR×FID — relative">DPS</th>
-          <th rowspan="2" title="enemy HP ÷ (DPS × your TAA) — green = fast kill">TTK↓</th>
-          <th rowspan="2" title="your HP ÷ (enemy DPS × enemy TAA) — green = they kill you slowly">TTK↑</th>
+          <th rowspan="2" id="th-sent" class="sortable" onclick="sortBy('sent')" title="(100+sentinel_enh−sentinel_dec)/100">Sent</th>
+          <th rowspan="2" id="th-heal" class="sortable" onclick="sortBy('heal')" title="max(0,(100+heal_enh−heal_dec)/100)">Heal</th>
+          <th rowspan="2" id="th-dps" class="sortable" onclick="sortBy('dps')" title="(Hit/80)×CritF×DBD×IR×FID — relative">DPS</th>
+          <th rowspan="2" id="th-myttk" class="sortable" onclick="sortBy('myttk')" title="enemy HP ÷ (DPS × your TAA) — green = fast kill">TTK↓</th>
+          <th rowspan="2" id="th-theirtk" class="sortable" onclick="sortBy('theirtk')" title="your HP ÷ (enemy DPS × enemy TAA) — green = they kill you slowly">TTK↑</th>
           <th rowspan="2">Sim</th>
         </tr>
         <tr>
@@ -247,6 +256,10 @@ tr:hover td{background:var(--bg3);}
     <span class="legend-item"><span class="dot" style="background:var(--yellow)"></span>0.75–0.89 / 45–64%</span>
     <span class="legend-item"><span class="dot" style="background:var(--red)"></span>0.60–0.74 / 30–44%</span>
     <span class="legend-item"><span class="dot" style="background:var(--red2)"></span>&lt;0.60 / &lt;30%</span>
+    <span style="color:var(--muted);margin-left:8px">│</span>
+    <span class="legend-item"><span style="display:inline-block;width:3px;height:12px;background:var(--green);border-radius:1px;margin-right:4px"></span>Favorable (you kill &gt;25% faster)</span>
+    <span class="legend-item"><span style="display:inline-block;width:3px;height:12px;background:var(--yellow);border-radius:1px;margin-right:4px"></span>Even (within 25%)</span>
+    <span class="legend-item"><span style="display:inline-block;width:3px;height:12px;background:var(--red);border-radius:1px;margin-right:4px"></span>Unfavorable (they kill &gt;25% faster)</span>
   </div>
 </section>
 
@@ -347,6 +360,12 @@ let ENEMIES = deepCloneSeed(currentWeek);
 let currentAtk = 'jackclown';
 let expandedEnemy = null;
 let calcMode = 'simple'; // 'simple' | 'full'
+let sortCol = 'dps', sortDir = -1;
+
+function sortBy(col){
+  if(sortCol===col) sortDir*=-1; else{sortCol=col;sortDir=-1;}
+  render();
+}
 
 function nextInput(el){
   const sel='.sf input,.num';
@@ -873,7 +892,23 @@ function render(){
     return {e,ei,hit,cp,cf,dbd,ir,fm,slots,sed,hed,dps,myKillRate,theirKillRate,hasEO};
   });
 
-  rows.sort((a,b)=>b.dps-a.dps);
+  const sortVal=(r,c)=>{
+    if(c==='name')return r.e.name.toLowerCase();
+    if(c==='bp')return r.e.bp||0;
+    if(c==='hit')return r.hit;
+    if(c==='cp')return r.cp;
+    if(c==='cf')return r.cf;
+    if(c==='dbd')return r.dbd;
+    if(c==='ir')return r.ir;
+    if(c==='fm')return r.fm;
+    if(c==='sent')return r.sed;
+    if(c==='heal')return r.hed;
+    if(c==='dps')return r.dps;
+    if(c==='myttk')return r.myKillRate||0;
+    if(c==='theirtk')return r.theirKillRate||0;
+    return 0;
+  };
+  rows.sort((a,b)=>{const av=sortVal(a,sortCol),bv=sortVal(b,sortCol);return sortDir*(av>bv?1:av<bv?-1:0);});
   const maxDps=Math.max(...rows.map(r=>r.dps));
   const maxMyKR=Math.max(...rows.map(r=>r.myKillRate||0));
   const maxTheirKR=Math.max(...rows.map(r=>r.theirKillRate||0));
@@ -902,7 +937,9 @@ function render(){
       ?`<td class="bar-cell ${theirTTKc}"><div class="bar-bg" style="width:${theirTTKw}%"></div><span class="bar-val">${(1/theirKillRate).toFixed(1)}s</span></td>`
       :`<td style="color:var(--muted);text-align:center">${hasEO?'—':'?'}</td>`;
 
-    html+=`<tr>
+    const muRatio=myKillRate&&theirKillRate?myKillRate/theirKillRate:null;
+    const muClass=muRatio?(muRatio>1.25?'mu-win':muRatio>0.8?'mu-even':'mu-loss'):'';
+    html+=`<tr class="${muClass}">
       <td class="name-cell" onclick="toggleExpand(${ei})">${expanded?'▼ ':'▶ '}${e.label?`<span style="color:var(--accent);font-size:10px;margin-right:4px">${e.label}</span>`:''}${e.name}</td>
       <td style="color:var(--muted)">${(e.bp/1e6).toFixed(2)}M</td>
       <td class="${colorH(hit)}">${hit.toFixed(1)}%</td>
@@ -925,6 +962,13 @@ function render(){
     if(expanded) html+=buildExpandRow(ei);
   }
   document.getElementById('tableBody').innerHTML=html;
+
+  for(const c of ['name','bp','hit','cp','cf','dbd','ir','fm','sent','heal','dps','myttk','theirtk']){
+    const el=document.getElementById('th-'+c);
+    if(!el)continue;
+    el.classList.remove('sort-asc','sort-desc');
+    if(c===sortCol)el.classList.add(sortDir>0?'sort-asc':'sort-desc');
+  }
 }
 
 // ═══════════════════════════════════════
