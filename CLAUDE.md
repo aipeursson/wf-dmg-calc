@@ -41,9 +41,11 @@ Fields to extract for each enemy:
 
 **PvP / aerial:** `pvp_inc`, `pvp_red`, `aerial_inc`, `aerial_red`
 
+**Per-weapon crit (added by wf-crit-scan):** `mg_crit` *(only if visible in screenshots)*, `mg_crit_res`, `wg_crit`, `wg_crit_res`, `ms_crit`, `ms_crit_res`, `mg_crit_dmg`, `mg_crit_dmg_res`, `wg_crit_dmg`, `wg_crit_dmg_res`, `ms_crit_dmg`, `ms_crit_dmg_res`
+
 **Meta:** `name`, `label` (grid position, filled in later from battle board), `drones` (3 slots, filled in later)
 
-Each enemy has ~9 screenshots: 6 core stat screens + 3 per-weapon detail screens (the per-weapon screens don't map to any schema field and can be skipped).
+Each enemy has ~9 screenshots: 6 core stat screens + 3 per-weapon detail screens. The per-weapon detail screens are handled by the **wf-crit-scan** agent (see `.claude/agents/wf-crit-scan.md`).
 
 ## Calculator structure
 
