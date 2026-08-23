@@ -634,29 +634,53 @@ function buildAtkPanel(){
 //  DRONE PANEL
 // ═══════════════════════════════════════
 const SLOT_NAMES=['Left-flank','Defender','Right-flank'];
+const DRONE_GRADES={'':'—',N:'N (120–180% skill)',R:'R (170–255% skill)',SR:'SR (200–300% skill)'};
+
+function passiveRowsHtml(d, pathPrefix){
+  if(!d.passives) d.passives=[];
+  const rows=d.passives.map((p,pi)=>`
+    <div class="ds-row" style="gap:4px">
+      <input placeholder="Passive name" value="${p.name||''}" style="flex:2"
+        oninput="${pathPrefix}.passives[${pi}].name=this.value;scheduleWrite()">
+      <input type="number" placeholder="Val%" value="${p.value||0}" step=".5" style="flex:1;min-width:50px"
+        oninput="${pathPrefix}.passives[${pi}].value=+this.value;render();scheduleWrite()">
+      <button class="btn" style="padding:2px 6px" onclick="${pathPrefix}.passives.splice(${pi},1);render();scheduleWrite()">✕</button>
+    </div>`).join('');
+  const addBtn=`<button class="btn" style="margin-top:2px;width:100%" ${d.passives.length>=5?'disabled':''}
+    onclick="if(!${pathPrefix}.passives)${pathPrefix}.passives=[];${pathPrefix}.passives.push({name:'',value:0});render();scheduleWrite()">+ Add passive (${d.passives.length}/5)</button>`;
+  return `<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
+    <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Passives</div>
+    ${rows}${addBtn}
+  </div>`;
+}
 
 function buildDronePanel(){
   const a=ATK_DB[currentAtk];
   const slots=a.drones.map((d,i)=>{
     const typeOpts=['burn','elec','reflect'].map(t=>`<option value="${t}"${d.type===t?' selected':''}>${t[0].toUpperCase()+t.slice(1)}</option>`).join('');
+    const gradeOpts=Object.keys(DRONE_GRADES).map(g=>`<option value="${g}"${(d.grade||'')===g?' selected':''}>${DRONE_GRADES[g]}</option>`).join('');
+    const path=`ATK_DB['${currentAtk}'].drones[${i}]`;
     return `<div class="drone-slot">
       <h3>${SLOT_NAMES[i]}</h3>
-      <div class="ds-row"><label>Name</label><input value="${d.name}" oninput="ATK_DB['${currentAtk}'].drones[${i}].name=this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="ATK_DB['${currentAtk}'].drones[${i}].level=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Type</label><select onchange="ATK_DB['${currentAtk}'].drones[${i}].type=this.value;render();scheduleWrite()">${typeOpts}</select></div>
-      <div class="ds-row"><label>Drone Dmg Boost%</label><input type="number" value="${d.dmgBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].dmgBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Physical Boost%</label><input type="number" value="${d.physBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].physBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Energy Boost%</label><input type="number" value="${d.energyBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].energyBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Normal Atk Boost%</label><input type="number" value="${d.naBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].naBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Skill Boost%</label><input type="number" value="${d.skillBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].skillBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Skill Mult%</label><input type="number" value="${d.skMult||0}" step="1" title="Drone skill multiplier (e.g. 300 for SR max evolve)" oninput="ATK_DB['${currentAtk}'].drones[${i}].skMult=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>ETR%</label><input type="number" value="${d.etr||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].etr=+this.value;scheduleWrite()"></div>
-      <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].tr=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Quick Reload passive — speeds up normal attacks">Quick Reload%</label><input type="number" value="${d.qr||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].qr=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Cooldown Cut passive — speeds up skill attacks">Cooldown Cut%</label><input type="number" value="${d.cc||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].cc=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Spot Weakness passive — NA crit rate (independent of global crit)">Spot Weakness%</label><input type="number" value="${d.sw||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].sw=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Raging Assault passive — adds to base 200% NA crit damage">Raging Assault%</label><input type="number" value="${d.ra||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].ra=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Resistance Boost%</label><input type="number" value="${d.resistBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].resistBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Name</label><input value="${d.name}" oninput="${path}.name=this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Type</label><select onchange="${path}.type=this.value;render();scheduleWrite()">${typeOpts}</select></div>
+      <div class="ds-row"><label>Grade</label><select onchange="${path}.grade=this.value;render();scheduleWrite()">${gradeOpts}</select></div>
+      <div class="ds-row"><label>Stars (0–35)</label><input type="number" value="${d.stars||0}" min="0" max="35" oninput="${path}.stars=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="${path}.level=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Drone Dmg Boost%</label><input type="number" value="${d.dmgBoost||0}" step=".5" oninput="${path}.dmgBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Physical Boost%</label><input type="number" value="${d.physBoost||0}" step=".5" oninput="${path}.physBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Energy Boost%</label><input type="number" value="${d.energyBoost||0}" step=".5" oninput="${path}.energyBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Normal Atk Boost%</label><input type="number" value="${d.naBoost||0}" step=".5" oninput="${path}.naBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Skill Boost%</label><input type="number" value="${d.skillBoost||0}" step=".5" oninput="${path}.skillBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Skill Mult%</label><input type="number" value="${d.skMult||0}" step="1" title="Drone skill multiplier (e.g. 300 for SR max evolve)" oninput="${path}.skMult=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>ETR%</label><input type="number" value="${d.etr||0}" step=".5" oninput="${path}.etr=+this.value;scheduleWrite()"></div>
+      <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="${path}.tr=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Quick Reload passive — speeds up normal attacks">Quick Reload%</label><input type="number" value="${d.qr||0}" step=".5" oninput="${path}.qr=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Cooldown Cut passive — speeds up skill attacks">Cooldown Cut%</label><input type="number" value="${d.cc||0}" step=".5" oninput="${path}.cc=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Spot Weakness passive — NA crit rate (independent of global crit)">Spot Weakness%</label><input type="number" value="${d.sw||0}" step=".5" oninput="${path}.sw=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Raging Assault passive — adds to base 200% NA crit damage">Raging Assault%</label><input type="number" value="${d.ra||0}" step=".5" oninput="${path}.ra=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Resistance Boost%</label><input type="number" value="${d.resistBoost||0}" step=".5" oninput="${path}.resistBoost=+this.value;render();scheduleWrite()"></div>
+      ${passiveRowsHtml(d,path)}
     </div>`;
   }).join('');
 
@@ -707,24 +731,29 @@ function buildExpandRow(ei){
 
   const droneSlots=e.drones.map((d,di)=>{
     const typeOpts=['burn','elec','reflect'].map(t=>`<option value="${t}"${d.type===t?' selected':''}>${t[0].toUpperCase()+t.slice(1)}</option>`).join('');
+    const gradeOpts=Object.keys(DRONE_GRADES).map(g=>`<option value="${g}"${(d.grade||'')===g?' selected':''}>${DRONE_GRADES[g]}</option>`).join('');
+    const path=`ENEMIES[${ei}].drones[${di}]`;
     return `<div class="expand-drone-slot">
       <h4>${SLOT_NAMES[di]}</h4>
-      <div class="ds-row"><label>Name</label><input value="${d.name}" oninput="ENEMIES[${ei}].drones[${di}].name=this.value;scheduleWrite()"></div>
-      <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="ENEMIES[${ei}].drones[${di}].level=+this.value;scheduleWrite()"></div>
-      <div class="ds-row"><label>Type</label><select onchange="ENEMIES[${ei}].drones[${di}].type=this.value;render();scheduleWrite()">${typeOpts}</select></div>
-      <div class="ds-row"><label>Drone Dmg Boost%</label><input type="number" value="${d.dmgBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].dmgBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Physical Boost%</label><input type="number" value="${d.physBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].physBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Energy Boost%</label><input type="number" value="${d.energyBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].energyBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Normal Atk Boost%</label><input type="number" value="${d.naBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].naBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Skill Boost%</label><input type="number" value="${d.skillBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].skillBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Skill Mult%</label><input type="number" value="${d.skMult||0}" step="1" title="Drone skill multiplier (e.g. 300 for SR max evolve)" oninput="ENEMIES[${ei}].drones[${di}].skMult=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>ETR%</label><input type="number" value="${d.etr||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].etr=+this.value;scheduleWrite()"></div>
-      <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].tr=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Quick Reload passive">Quick Reload%</label><input type="number" value="${d.qr||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].qr=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Cooldown Cut passive">Cooldown Cut%</label><input type="number" value="${d.cc||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].cc=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Spot Weakness passive — NA crit rate">Spot Weakness%</label><input type="number" value="${d.sw||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].sw=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Raging Assault passive — adds to 200% base NA crit damage">Raging Assault%</label><input type="number" value="${d.ra||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].ra=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Resistance Boost%</label><input type="number" value="${d.resistBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].resistBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Name</label><input value="${d.name}" oninput="${path}.name=this.value;scheduleWrite()"></div>
+      <div class="ds-row"><label>Type</label><select onchange="${path}.type=this.value;render();scheduleWrite()">${typeOpts}</select></div>
+      <div class="ds-row"><label>Grade</label><select onchange="${path}.grade=this.value;render();scheduleWrite()">${gradeOpts}</select></div>
+      <div class="ds-row"><label>Stars (0–35)</label><input type="number" value="${d.stars||0}" min="0" max="35" oninput="${path}.stars=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="${path}.level=+this.value;scheduleWrite()"></div>
+      <div class="ds-row"><label>Drone Dmg Boost%</label><input type="number" value="${d.dmgBoost||0}" step=".5" oninput="${path}.dmgBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Physical Boost%</label><input type="number" value="${d.physBoost||0}" step=".5" oninput="${path}.physBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Energy Boost%</label><input type="number" value="${d.energyBoost||0}" step=".5" oninput="${path}.energyBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Normal Atk Boost%</label><input type="number" value="${d.naBoost||0}" step=".5" oninput="${path}.naBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Skill Boost%</label><input type="number" value="${d.skillBoost||0}" step=".5" oninput="${path}.skillBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Skill Mult%</label><input type="number" value="${d.skMult||0}" step="1" title="Drone skill multiplier (e.g. 300 for SR max evolve)" oninput="${path}.skMult=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>ETR%</label><input type="number" value="${d.etr||0}" step=".5" oninput="${path}.etr=+this.value;scheduleWrite()"></div>
+      <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="${path}.tr=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Quick Reload passive">Quick Reload%</label><input type="number" value="${d.qr||0}" step=".5" oninput="${path}.qr=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Cooldown Cut passive">Cooldown Cut%</label><input type="number" value="${d.cc||0}" step=".5" oninput="${path}.cc=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Spot Weakness passive — NA crit rate">Spot Weakness%</label><input type="number" value="${d.sw||0}" step=".5" oninput="${path}.sw=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Raging Assault passive — adds to 200% base NA crit damage">Raging Assault%</label><input type="number" value="${d.ra||0}" step=".5" oninput="${path}.ra=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Resistance Boost%</label><input type="number" value="${d.resistBoost||0}" step=".5" oninput="${path}.resistBoost=+this.value;render();scheduleWrite()"></div>
+      ${passiveRowsHtml(d,path)}
     </div>`;
   }).join('');
 
