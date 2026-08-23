@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WF 071926 – Damage Calculator</title>
+
+<script>
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyCNWdOhB15t972YbHiQ8vylpitL1GLaats",
+  authDomain:        "wingfighter-dmg-simulator.firebaseapp.com",
+  databaseURL:       "https://wingfighter-dmg-simulator-default-rtdb.firebaseio.com",
+  projectId:         "wingfighter-dmg-simulator",
+  storageBucket:     "wingfighter-dmg-simulator.firebasestorage.app",
+  messagingSenderId: "153562029937",
+  appId:             "1:153562029937:web:8803c127fa85c6cb88e0d0"
+};
+const WEEKS = [
+  {id:'wf071926', label:'Jul 19 2026', clan:'野生の王国'},
+  {id:'wf072626', label:'Jul 26 2026', clan:'ALBATROSS'},
+];
+let currentWeek = WEEKS[WEEKS.length - 1].id;
+</script>
+
+<script src="https://www.gstatic.com/firebasejs/12.16.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.16.0/firebase-database-compat.js"></script>
+
+<style>
+:root{
+  --bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;
+  --text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;
+  --green:#3fb950;--yellow:#d29922;--red:#f85149;--red2:#da3633;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  font-size:13px;color-scheme:dark;
+}
+@media(prefers-color-scheme:light){:root{
+  --bg:#f0f4f8;--bg2:#fff;--bg3:#e8edf3;--border:#d0d7de;
+  --text:#1f2328;--muted:#57606a;--accent:#0969da;
+  --green:#1a7f37;--yellow:#9a6700;--red:#cf222e;--red2:#a40e26;
+}}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);min-height:100vh;}
+header{background:var(--bg2);border-bottom:1px solid var(--border);padding:9px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+h1{font-size:14px;font-weight:700;color:var(--accent);white-space:nowrap;}
+.sub{font-size:11px;color:var(--muted);}
+/* sync bar */
+.sync-bar{display:flex;align-items:center;gap:8px;padding:5px 14px;border-bottom:1px solid var(--border);font-size:11px;flex-wrap:wrap;}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:background .3s;}
+.sync-dot.live{background:var(--green);box-shadow:0 0 4px var(--green);}
+.sync-dot.err{background:var(--red);}
+.sync-dot.pending{background:var(--yellow);}
+#syncMsg{flex:1;color:var(--muted);}
+#nicknameDisplay{color:var(--accent);font-weight:600;}
+.btn{background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;}
+.btn:hover{border-color:var(--accent);color:var(--accent);}
+/* config warning */
+.cfg-warn{background:#2d1a00;border:1px solid var(--yellow);color:var(--yellow);border-radius:6px;padding:10px 14px;margin:12px 14px;font-size:12px;}
+.cfg-warn code{background:rgba(255,255,255,.08);border-radius:3px;padding:1px 4px;font-size:11px;}
+/* controls */
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px 14px;background:var(--bg3);border-bottom:1px solid var(--border);font-size:12px;}
+.cg{display:flex;align-items:center;gap:4px;}
+.cg label{color:var(--muted);white-space:nowrap;}
+select,.num{background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:2px 6px;font-size:12px;font-family:inherit;}
+.num{width:62px;text-align:right;}
+/* panels */
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin:10px 14px;overflow:hidden;}
+.panel-head{display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--bg3);border-bottom:1px solid var(--border);cursor:pointer;user-select:none;}
+.panel-head h2{font-size:12px;font-weight:600;flex:1;}
+.panel-head .chevron{color:var(--muted);font-size:11px;transition:transform .15s;}
+.panel-head.open .chevron{transform:rotate(180deg);}
+.panel-body{padding:12px;}
+/* stat grid */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px;}
+.sf{display:flex;flex-direction:column;gap:2px;}
+.sf label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+.sf input{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 6px;font-size:12px;font-family:inherit;font-variant-numeric:tabular-nums;width:100%;}
+.sf input:focus{outline:none;border-color:var(--accent);}
+.sf input.miss{border-style:dashed;opacity:.6;}
+/* drone slots */
+.drone-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:4px;}
+.drone-slot{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:8px;}
+.drone-slot h3{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
+.ds-row{display:flex;align-items:center;gap:4px;margin-bottom:4px;}
+.ds-row label{font-size:10px;color:var(--muted);min-width:110px;white-space:nowrap;}
+.ds-row input,.ds-row select{background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:2px 5px;font-size:12px;flex:1;font-family:inherit;}
+.drone-formula{font-size:10px;color:var(--muted);margin-top:10px;padding:8px;background:var(--bg3);border-radius:5px;border:1px solid var(--border);}
+.drone-formula strong{color:var(--accent);}
+/* table */
+section{padding:0 14px 14px;}
+.sec-title{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:10px 0 6px;}
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums;}
+th{background:var(--bg3);color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:5px 6px;border-bottom:2px solid var(--border);text-align:right;white-space:nowrap;}
+th:first-child{text-align:left;padding-left:8px;}
+td{padding:4px 6px;border-bottom:1px solid var(--border);text-align:right;vertical-align:middle;}
+td.name-cell{text-align:left;font-weight:600;padding-left:8px;white-space:nowrap;cursor:pointer;}
+td.name-cell:hover{color:var(--accent);}
+tr:hover td{background:var(--bg3);}
+.good{color:var(--green);}
+.ok{color:var(--yellow);}
+.bad{color:var(--red);}
+.vbad{color:var(--red2);font-weight:700;}
+.bar-cell{position:relative;min-width:70px;}
+.bar-bg{position:absolute;left:0;top:2px;bottom:2px;background:var(--accent);opacity:.18;border-radius:2px;pointer-events:none;}
+.bar-val{position:relative;z-index:1;}
+/* expand row */
+.expand-row td{padding:0;border-bottom:2px solid var(--accent);}
+.expand-body{padding:10px 12px;background:var(--bg2);}
+.expand-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:5px;margin-bottom:8px;}
+.expand-drone-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px;}
+.expand-drone-slot{background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:7px;}
+.expand-drone-slot h4{font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:5px;}
+/* drone-col visibility toggle */
+#mainTable.no-drone .drone-col{display:none;}
+/* legend */
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;margin-top:8px;}
+.legend-item{display:flex;align-items:center;gap:4px;}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+/* sortable headers */
+th.sortable{cursor:pointer;user-select:none;}
+th.sortable:hover{color:var(--text);}
+th.sort-asc::after{content:' ▲';opacity:.6;font-size:9px;}
+th.sort-desc::after{content:' ▼';opacity:.6;font-size:9px;}
+/* matchup row stripe on first cell */
+tr.mu-win>td:first-child{border-left:3px solid var(--green);}
+tr.mu-even>td:first-child{border-left:3px solid var(--yellow);}
+tr.mu-loss>td:first-child{border-left:3px solid var(--red);}
+/* nickname modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px;min-width:280px;max-width:340px;}
+.modal h3{font-size:14px;margin-bottom:10px;}
+.modal p{font-size:12px;color:var(--muted);margin-bottom:12px;}
+.modal input{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:6px 10px;font-size:13px;font-family:inherit;margin-bottom:10px;}
+.modal input:focus{outline:none;border-color:var(--accent);}
+.modal button{width:100%;background:var(--accent);color:#000;border:none;border-radius:5px;padding:7px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;}
+</style>
+</head>
+<body>
+
+<!-- Nickname modal (shown on first visit) -->
+<div class="modal-overlay" id="nicknameModal" style="display:none">
+  <div class="modal">
+    <h3>Who are you?</h3>
+    <p>Your name appears in the sync log so teammates know who saved.</p>
+    <input id="nicknameInput" placeholder="e.g. jackclown" maxlength="24">
+    <button onclick="setNickname()">Let's go</button>
+  </div>
+</div>
+
+<header>
+  <div><h1 id="pageTitle">⚔ WF 071926 – Damage Calculator</h1><div class="sub" id="pageSubtitle">The Astral Vanguard vs 野生の王国</div></div>
+</header>
+
+<div class="sync-bar">
+  <span class="sync-dot" id="syncDot"></span>
+  <span id="syncMsg">Connecting…</span>
+  <span id="nicknameDisplay"></span>
+  <button class="btn" onclick="promptNickname()" style="margin-left:4px">✏ Name</button>
+</div>
+
+<div id="cfgWarn" class="cfg-warn" style="display:none">
+  ⚠ Firebase not configured. Edit <code>FIREBASE_CONFIG</code> at the top of this file with your project credentials, then reload.
+</div>
+
+<div id="weekReadOnly" style="display:none;background:#7c4d00;color:#ffe0a0;padding:6px 14px;font-size:12px;font-weight:600;text-align:center">
+  ⚠ Viewing historical week — changes will not be saved
+</div>
+<div class="controls">
+  <div class="cg"><label>Mode</label>
+    <select id="modeSel" onchange="setCalcMode(this.value)">
+      <option value="simple">Simple</option>
+      <option value="full">Full (Drones)</option>
+    </select>
+  </div>
+  <div class="cg"><label>War Week</label>
+    <select id="weekSel" onchange="switchWeek(this.value)"></select>
+  </div>
+  <div class="cg"><label>Attacker</label>
+    <select id="atkSel" onchange="loadAttacker(this.value)"></select>
+  </div>
+  <div class="cg"><label>Weapon</label>
+    <select id="wpType" onchange="render()">
+      <option value="phys">Physical</option>
+      <option value="energy">Energy</option>
+    </select>
+  </div>
+  <div class="cg"><label>vs enemy type</label>
+    <select id="enemyType" onchange="render()">
+      <option value="aerial">Aerial</option>
+      <option value="ground">Ground/Sea</option>
+      <option value="none">No modifier</option>
+    </select>
+  </div>
+  <div class="cg"><label title="5/5 titan gears multiply MG/WG/MS attack by 1.3×">5/5 Titan</label>
+    <input type="checkbox" id="titanGear" onchange="render()" checked>
+  </div>
+</div>
+
+<div class="panel" id="atkPanel">
+  <div class="panel-head open" onclick="togglePanel('atkPanel')">
+    <h2 id="atkTitle">jackclown – Combat Stats</h2>
+    <span class="chevron">▼</span>
+  </div>
+  <div class="panel-body" id="atkBody"></div>
+</div>
+
+<div class="panel" id="dronePanel">
+  <div class="panel-head open" onclick="togglePanel('dronePanel')">
+    <h2>Drone Lineup</h2>
+    <span class="chevron">▼</span>
+  </div>
+  <div class="panel-body" id="droneBody"></div>
+</div>
+
+<section>
+  <div class="sec-title">Enemy matchups — click enemy name to expand &amp; edit stats</div>
+  <div class="table-wrap">
+    <table id="mainTable">
+      <thead>
+        <tr>
+          <th rowspan="2" id="th-name" class="sortable" onclick="sortBy('name')">Enemy</th>
+          <th rowspan="2" id="th-bp" class="sortable" onclick="sortBy('bp')">BP</th>
+          <th rowspan="2" id="th-hit" class="sortable" onclick="sortBy('hit')" title="Hit chance (capped 20–80%). Your hit rate minus enemy dodge rate. 65%+ is favorable (green). Formula: min(80, max(20, 100+hit−dodge))">Hit%</th>
+          <th rowspan="2" id="th-cp" class="sortable" onclick="sortBy('cp')" title="Effective crit rate (capped 0–80%). Your crit rate minus enemy crit resistance. Higher = more crits land. Formula: min(80, max(0, crit−crit_res))">Crit%</th>
+          <th rowspan="2" id="th-cf" class="sortable" onclick="sortBy('cf')" title="Crit damage multiplier (≥1.0). Blends per-weapon crit rates and crit damage bonuses. 1.0 = crits give no extra damage; 2.0 = every hit is a full double-damage crit.">CritF</th>
+          <th rowspan="2" id="th-dbd" class="sortable" onclick="sortBy('dbd')" title="Defense break ratio. Your pdb vs. their pd (physical) or edb vs. ed (energy), via game formula. &gt;1.0 = you pierce their defense; &lt;1.0 = their defense resists you.">DefBrk</th>
+          <th rowspan="2" id="th-ir" class="sortable" onclick="sortBy('ir')" title="Damage incident ratio (net damage modifier). Your PvP + dmg_inc + weapon/area bonuses minus their PvP &amp; dmg_red reductions. &gt;1.0 = net damage boost against this enemy.">DmgMod</th>
+          <th rowspan="2" id="th-fm" class="sortable" onclick="sortBy('fm')" title="Final damage multiplier. (100 + your fid_inc − fid_dec) / 100. Applied after all other multipliers — affects your total damage output. &gt;1.0 is beneficial.">FinalD</th>
+          <th colspan="3" class="drone-col" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr0">Left-flank</th>
+          <th colspan="3" class="drone-col" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr1">Defender</th>
+          <th colspan="3" class="drone-col" style="text-align:center;border-left:1px solid var(--border)" id="slotHdr2">Right-flank</th>
+          <th rowspan="2" id="th-sent" class="sortable" onclick="sortBy('sent')" title="Sentinel skill multiplier. (100 + your sentinel_enh − enemy sentinel_dec) / 100. &gt;1.0 = your sentinel hits harder against them; &lt;1.0 = their sentinel resistance reduces your damage.">Sent</th>
+          <th rowspan="2" id="th-heal" class="sortable" onclick="sortBy('heal')" title="Heal effectiveness multiplier. (100 + your heal_enh − enemy heal_dec) / 100. &gt;1.0 = your heals restore more HP against this enemy.">Heal</th>
+          <th rowspan="2" id="th-dps" class="sortable" onclick="sortBy('dps')" title="Relative damage index: Hit% × CritF × DefBrk × DmgMod × FinalD. Not real damage values — use it to compare which enemies you hit hardest or softest.">DPS</th>
+          <th rowspan="2" id="th-myttk" class="sortable" onclick="sortBy('myttk')" title="Time-to-kill (you → enemy). Enemy HP ÷ (your DPS × your total attack power). Smaller number = you kill them faster. Green = you kill them &gt;25% faster than they kill you.">TTK↓</th>
+          <th rowspan="2" id="th-theirtk" class="sortable" onclick="sortBy('theirtk')" title="Survivability (enemy → you). Your HP ÷ (enemy DPS × their total attack power). Larger number = they take longer to kill you. Green = they kill you &gt;25% slower than you kill them.">TTK↑</th>
+          <th rowspan="2">Sim</th>
+        </tr>
+        <tr>
+          <th class="drone-col" title="Element damage multiplier. (100 + your element enh − enemy element dec) / 100, capped at 2×. &gt;1.0 if your drone's element type is effective against this enemy." style="border-left:1px solid var(--border)">ED</th>
+          <th class="drone-col" title="Drone normal-attack damage ratio. Your PvP + dmg boosts minus enemy PvP reductions, plus this drone's normal-attack IR bonus.">NA</th>
+          <th class="drone-col" title="Drone skill damage ratio. Your PvP + dmg boosts minus enemy PvP reductions, plus this drone's skill IR bonus.">SK</th>
+          <th class="drone-col" title="Element damage multiplier. (100 + your element enh − enemy element dec) / 100, capped at 2×. &gt;1.0 if your drone's element type is effective against this enemy." style="border-left:1px solid var(--border)">ED</th>
+          <th class="drone-col" title="Drone normal-attack damage ratio. Your PvP + dmg boosts minus enemy PvP reductions, plus this drone's normal-attack IR bonus.">NA</th>
+          <th class="drone-col" title="Drone skill damage ratio. Your PvP + dmg boosts minus enemy PvP reductions, plus this drone's skill IR bonus.">SK</th>
+          <th class="drone-col" title="Element damage multiplier. (100 + your element enh − enemy element dec) / 100, capped at 2×. &gt;1.0 if your drone's element type is effective against this enemy." style="border-left:1px solid var(--border)">ED</th>
+          <th class="drone-col" title="Drone normal-attack damage ratio. Your PvP + dmg boosts minus enemy PvP reductions, plus this drone's normal-attack IR bonus.">NA</th>
+          <th class="drone-col" title="Drone skill damage ratio. Your PvP + dmg boosts minus enemy PvP reductions, plus this drone's skill IR bonus.">SK</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+  <div class="legend">
+    <span class="legend-item"><span class="dot" style="background:var(--green)"></span>≥0.90 / Hit≥65%</span>
+    <span class="legend-item"><span class="dot" style="background:var(--yellow)"></span>0.75–0.89 / 45–64%</span>
+    <span class="legend-item"><span class="dot" style="background:var(--red)"></span>0.60–0.74 / 30–44%</span>
+    <span class="legend-item"><span class="dot" style="background:var(--red2)"></span>&lt;0.60 / &lt;30%</span>
+    <span style="color:var(--muted);margin-left:8px">│</span>
+    <span class="legend-item"><span style="display:inline-block;width:3px;height:12px;background:var(--green);border-radius:1px;margin-right:4px"></span>Favorable (you kill &gt;25% faster)</span>
+    <span class="legend-item"><span style="display:inline-block;width:3px;height:12px;background:var(--yellow);border-radius:1px;margin-right:4px"></span>Even (within 25%)</span>
+    <span class="legend-item"><span style="display:inline-block;width:3px;height:12px;background:var(--red);border-radius:1px;margin-right:4px"></span>Unfavorable (they kill &gt;25% faster)</span>
+  </div>
+</section>
+
+<script>
+// ═══════════════════════════════════════
+//  DATA
+// ═══════════════════════════════════════
+const ATK_TEMPLATES = {
+  // ── Jul 26 2026 ──
+  jackclown:   {mg_atk:274576,wg_atk:240978,ms_atk:292201,hp:903466,crit:267.09,dodge:103.80,crit_res:167.40,hit:221.17,pdb:2516,pd:2452,edb:2041,ed:2073,pvp_inc:31.5,pvp_red:30.9,aerial_inc:63.20,aerial_red:85.27,ground_inc:14.0,ground_red:17.2,fid_inc:5.55,fid_dec:24.65,elec_enh:42.2,burn_enh:46.3,reflect_enh:35.3,elec_dec:90.8,burn_dec:88.5,reflect_dec:88.8,sentinel_enh:28.6,sentinel_dec:99.7,heal_enh:123.8,heal_dec:121.6,dmg_inc:0,dmg_red:12.0,mg_crit_res:20,wg_crit:33.6,wg_crit_res:19,ms_crit:36,ms_crit_res:18,mg_crit_dmg:83,mg_crit_dmg_res:27.8,wg_crit_dmg:83,wg_crit_dmg_res:26.8,ms_crit_dmg:81,ms_crit_dmg_res:26.6,
+    drones:[
+      {name:'Cerberus',level:179,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:35,tr:0,resistBoost:0},
+      {name:'Sentry',  level:200,type:'reflect',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:28,tr:42,resistBoost:0},
+      {name:'Ninja',   level:200,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:35,tr:0,resistBoost:0},
+    ]},
+  XenoX:      {mg_atk:311758,wg_atk:335928,ms_atk:342863,hp:1207336,crit:270.02,dodge:94.40,crit_res:320.20,hit:123.40,pdb:2922,pd:2924,edb:2534,ed:2606,pvp_inc:40.05,pvp_red:37.80,aerial_inc:70.75,aerial_red:103.32,ground_inc:46.4,ground_red:51.6,fid_inc:7.30,fid_dec:36.15,elec_enh:42.8,burn_enh:45.7,reflect_enh:35.9,elec_dec:99.2,burn_dec:106.8,reflect_dec:97.8,sentinel_enh:31.4,sentinel_dec:71.0,heal_enh:127.6,heal_dec:122.6,dmg_inc:0,dmg_red:7.0,mg_crit_res:24,wg_crit:39,wg_crit_res:23,ms_crit:39,ms_crit_res:24,mg_crit_dmg:88,mg_crit_dmg_res:30.2,wg_crit_dmg:88,wg_crit_dmg_res:31.4,ms_crit_dmg:86,ms_crit_dmg_res:32,
+    drones:[{name:'?',level:0,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'?',level:0,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'?',level:0,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0}]},
+  xXQuantumXx:{mg_atk:325258,wg_atk:361763,ms_atk:354874,hp:1202403,crit:80.30,dodge:160.65,crit_res:107.50,hit:233.08,pdb:2886,pd:2900,edb:2576,ed:2702,pvp_inc:41.70,pvp_red:38.85,aerial_inc:70.0,aerial_red:100.16,ground_inc:46.8,ground_red:52.8,fid_inc:6.75,fid_dec:30.85,elec_enh:46.7,burn_enh:161.94,reflect_enh:40.0,elec_dec:91.8,burn_dec:161.76,reflect_dec:100.3,sentinel_enh:26.8,sentinel_dec:23.1,heal_enh:28.6,heal_dec:84.0,dmg_inc:0,dmg_red:7.0,mg_crit_res:23,wg_crit:39.6,wg_crit_res:23,ms_crit:40.2,ms_crit_res:25,mg_crit_dmg:87,mg_crit_dmg_res:31.4,wg_crit_dmg:87,wg_crit_dmg_res:31.4,ms_crit_dmg:85,ms_crit_dmg_res:31.4,
+    drones:[
+      {name:'Sagittarius',level:156,type:'burn',dmgBoost:12,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},
+      {name:'Lyra',level:136,type:'burn',dmgBoost:10,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},
+      {name:'Fornax',level:136,type:'burn',dmgBoost:12,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},
+    ]},
+  TecoTeco:   {mg_atk:303477,wg_atk:325561,ms_atk:329811,hp:1108863,crit:72.40,dodge:326.94,crit_res:166.60,hit:215.59,pdb:2758,pd:2459,edb:2363,ed:2718,pvp_inc:46.75,pvp_red:39.85,aerial_inc:69.95,aerial_red:102.46,ground_inc:46.8,ground_red:42.8,fid_inc:8.50,fid_dec:30.75,elec_enh:47.7,burn_enh:45.2,reflect_enh:44.1,elec_dec:108.86,burn_dec:127.69,reflect_dec:102.8,sentinel_enh:107.8,sentinel_dec:23.6,heal_enh:194.0,heal_dec:29.5,dmg_inc:0,dmg_red:8.0,mg_crit_res:21,wg_crit:33.6,wg_crit_res:14,ms_crit:34.2,ms_crit_res:22,mg_crit_dmg:82,mg_crit_dmg_res:25.4,wg_crit_dmg:77,wg_crit_dmg_res:25.4,ms_crit_dmg:84,ms_crit_dmg_res:27.2,
+    drones:[{name:'Gladiator',level:200,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'Scorpion lion',level:200,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'Sagittarius',level:115,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0}]},
+  ripman:     {mg_atk:292213,wg_atk:330828,ms_atk:348102,hp:1108452,crit:70.80,dodge:315.68,crit_res:147.96,hit:232.84,pdb:2678,pd:2635,edb:2292,ed:2332,pvp_inc:42.70,pvp_red:37.15,aerial_inc:70.75,aerial_red:99.44,ground_inc:46.8,ground_red:52.4,fid_inc:3.65,fid_dec:29.10,elec_enh:39.8,burn_enh:42.0,reflect_enh:37.4,elec_dec:102.98,burn_dec:93.6,reflect_dec:104.41,sentinel_enh:72.0,sentinel_dec:22.5,heal_enh:85.1,heal_dec:21.2,dmg_inc:0,dmg_red:0,mg_crit_res:22,wg_crit:38.4,wg_crit_res:23,ms_crit:39,ms_crit_res:21,mg_crit_dmg:85,mg_crit_dmg_res:30.8,wg_crit_dmg:84,wg_crit_dmg_res:27.9,ms_crit_dmg:85,ms_crit_dmg_res:27.8,
+    drones:[{name:'Apus',level:110,type:'reflect',dmgBoost:6,physBoost:5,energyBoost:0,naBoost:0,skillBoost:0,etr:5,tr:0,resistBoost:0},{name:'Gladiator',level:200,type:'burn',dmgBoost:7,physBoost:7,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:7,resistBoost:0},{name:'Sagittarius',level:154,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0}]},
+  Ribfeast:   {mg_atk:324083,wg_atk:295714,ms_atk:325957,hp:1046837,crit:67.20,dodge:291.83,crit_res:123.33,hit:162.60,pdb:2583,pd:2548,edb:2202,ed:2309,pvp_inc:40.15,pvp_red:32.10,aerial_inc:66.45,aerial_red:93.47,ground_inc:47.6,ground_red:38.4,fid_inc:5.85,fid_dec:29.25,elec_enh:31.6,burn_enh:54.7,reflect_enh:35.0,elec_dec:145.76,burn_dec:100.69,reflect_dec:115.8,sentinel_enh:18.3,sentinel_dec:18.2,heal_enh:159.7,heal_dec:20.2,dmg_inc:0,dmg_red:24.0,mg_crit_res:21,wg_crit:37.8,wg_crit_res:18.5,ms_crit:37.2,ms_crit_res:22,mg_crit_dmg:87,mg_crit_dmg_res:29,wg_crit_dmg:84,wg_crit_dmg_res:28.8,ms_crit_dmg:87,ms_crit_dmg_res:29.6,
+    drones:[{name:'Scorpion lion',level:164,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'Gladiator',level:200,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'Sagittarius',level:150,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0}]},
+  SuperFight: {mg_atk:237945,wg_atk:292586,ms_atk:330683,hp:942350,crit:163.58,dodge:201.89,crit_res:202.71,hit:105.80,pdb:2057,pd:2290,edb:2381,ed:2131,pvp_inc:40.10,pvp_red:35.85,aerial_inc:67.75,aerial_red:90.15,ground_inc:44.5,ground_red:29.0,fid_inc:3.45,fid_dec:28.05,elec_enh:34.2,burn_enh:39.4,reflect_enh:49.6,elec_dec:130.04,burn_dec:82.9,reflect_dec:105.47,sentinel_enh:100.7,sentinel_dec:18.5,heal_enh:124.2,heal_dec:23.0,dmg_inc:0,dmg_red:14.0,mg_crit_res:24,wg_crit:37.8,wg_crit_res:22,ms_crit:37.8,ms_crit_res:24,mg_crit_dmg:87,mg_crit_dmg_res:30.8,wg_crit_dmg:85,wg_crit_dmg_res:28.4,ms_crit_dmg:83,ms_crit_dmg_res:29,
+    drones:[{name:'?',level:0,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'?',level:0,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'?',level:0,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0}]},
+  BARCHIO:    {mg_atk:268214,wg_atk:294363,ms_atk:341044,hp:964626,crit:73.15,dodge:133.53,crit_res:115.75,hit:187.47,pdb:2233,pd:2527,edb:2479,ed:2270,pvp_inc:36.85,pvp_red:34.65,aerial_inc:65.35,aerial_red:85.04,ground_inc:46.0,ground_red:55.4,fid_inc:5.45,fid_dec:24.35,elec_enh:77.29,burn_enh:48.04,reflect_enh:84.06,elec_dec:72.9,burn_dec:111.46,reflect_dec:109.5,sentinel_enh:19.9,sentinel_dec:12.4,heal_enh:23.4,heal_dec:16.1,dmg_inc:0,dmg_red:13.0,mg_crit_res:17,wg_crit:21.4,wg_crit_res:16,ms_crit:31.8,ms_crit_res:14.75,mg_crit_dmg:85,mg_crit_dmg_res:27.2,wg_crit_dmg:46,wg_crit_dmg_res:27.2,ms_crit_dmg:85,ms_crit_dmg_res:29,
+    drones:[{name:'Gladiator',level:200,type:'burn',dmgBoost:7,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:7,resistBoost:0},{name:'Medusa',level:172,type:'reflect',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:5,resistBoost:6},{name:'Fornax',level:139,type:'burn',dmgBoost:8,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0}]},
+  R4sh:       {mg_atk:267585,wg_atk:263314,ms_atk:299949,hp:898648,crit:53.58,dodge:164.45,crit_res:161.38,hit:128.95,pdb:2484,pd:2465,edb:2182,ed:2251,pvp_inc:35.44,pvp_red:34.50,aerial_inc:68.20,aerial_red:98.58,ground_inc:45.6,ground_red:23.2,fid_inc:3.90,fid_dec:17.11,elec_enh:22.75,burn_enh:60.84,reflect_enh:44.74,elec_dec:74.7,burn_dec:65.24,reflect_dec:73.99,sentinel_enh:19.74,sentinel_dec:10.25,heal_enh:18.89,heal_dec:144.95,dmg_inc:0,dmg_red:6.58,mg_crit_res:23,wg_crit:37.2,wg_crit_res:21,ms_crit:38.4,ms_crit_res:21,mg_crit_dmg:87,mg_crit_dmg_res:29.6,wg_crit_dmg:84,wg_crit_dmg_res:29,ms_crit_dmg:85,ms_crit_dmg_res:29,
+    drones:[{name:'?',level:0,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'?',level:0,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'?',level:0,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0}]},
+  CapnMal:    {mg_atk:226536,wg_atk:246287,ms_atk:268020,hp:889984,crit:71.10,dodge:313.01,crit_res:207.57,hit:197.04,pdb:2466,pd:2516,edb:2119,ed:2248,pvp_inc:37.20,pvp_red:33.85,aerial_inc:63.05,aerial_red:90.09,ground_inc:13.6,ground_red:20.4,fid_inc:5.65,fid_dec:33.40,elec_enh:39.4,burn_enh:43.7,reflect_enh:48.7,elec_dec:91.1,burn_dec:112.4,reflect_dec:90.0,sentinel_enh:27.5,sentinel_dec:27.8,heal_enh:174.3,heal_dec:22.1,dmg_inc:0,dmg_red:6.0,mg_crit_res:22,wg_crit:37.8,wg_crit_res:21,ms_crit:37.8,ms_crit_res:23,mg_crit_dmg:84,mg_crit_dmg_res:28.4,wg_crit_dmg:84,wg_crit_dmg_res:23.3,ms_crit_dmg:85,ms_crit_dmg_res:29.6,
+    drones:[{name:'?',level:0,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'?',level:0,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'?',level:0,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0}]},
+  Jigglypoop: {mg_atk:217324,wg_atk:255331,ms_atk:302128,hp:846258,crit:52.30,dodge:282.97,crit_res:139.77,hit:221.71,pdb:2463,pd:2233,edb:2344,ed:2092,pvp_inc:35.85,pvp_red:33.65,aerial_inc:60.6,aerial_red:95.27,ground_inc:41.4,ground_red:22.4,fid_inc:6.00,fid_dec:23.60,elec_enh:22.8,burn_enh:32.8,reflect_enh:28.4,elec_dec:81.1,burn_dec:81.3,reflect_dec:80.0,sentinel_enh:16.5,sentinel_dec:12.3,heal_enh:13.5,heal_dec:12.6,dmg_inc:0,dmg_red:13.0,mg_crit_res:25,wg_crit:31,wg_crit_res:20,ms_crit:36,ms_crit_res:25,mg_crit_dmg:86,mg_crit_dmg_res:27.2,wg_crit_dmg:61,wg_crit_dmg_res:26.2,ms_crit_dmg:87,ms_crit_dmg_res:27.2,
+    drones:[{name:'Sagittarius',level:153,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'Gladiator',level:200,type:'burn',dmgBoost:7,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:7,resistBoost:0},{name:'Lyra',level:82,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0}]},
+  DEADCLOWNX: {mg_atk:221816,wg_atk:289230,ms_atk:289062,hp:1106521,crit:72.72,dodge:154.26,crit_res:118.30,hit:126.77,pdb:2212,pd:2224,edb:2000,ed:1967,pvp_inc:33.35,pvp_red:31.10,aerial_inc:64.5,aerial_red:91.3,ground_inc:31.1,ground_red:37.0,fid_inc:3.20,fid_dec:14.30,elec_enh:14.0,burn_enh:19.5,reflect_enh:20.9,elec_dec:57.7,burn_dec:59.0,reflect_dec:82.0,sentinel_enh:11.9,sentinel_dec:5.0,heal_enh:14.3,heal_dec:11.7,dmg_inc:0,dmg_red:6.0,mg_crit_res:16.75,wg_crit:30.2,wg_crit_res:19.25,ms_crit:37.2,ms_crit_res:21,mg_crit_dmg:83,mg_crit_dmg_res:18.9,wg_crit_dmg:52.5,wg_crit_dmg_res:26.4,ms_crit_dmg:81,ms_crit_dmg_res:29.6,
+    drones:[{name:'Ninja',level:200,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:24.5,resistBoost:0},{name:'Ninja',level:200,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:24.5,resistBoost:0},{name:'Sagittarius',level:116,type:'burn',dmgBoost:8,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0}]},
+  Manjanheta: {mg_atk:209168,wg_atk:247086,ms_atk:237940,hp:705315,crit:72.40,dodge:186.74,crit_res:154.07,hit:142.61,pdb:2112,pd:2198,edb:1945,ed:1991,pvp_inc:34.35,pvp_red:31.35,aerial_inc:56.85,aerial_red:69.29,ground_inc:30.4,ground_red:32.2,fid_inc:4.50,fid_dec:23.25,elec_enh:34.2,burn_enh:32.4,reflect_enh:79.81,elec_dec:83.43,burn_dec:90.34,reflect_dec:95.16,sentinel_enh:22.6,sentinel_dec:21.5,heal_enh:18.8,heal_dec:22.1,dmg_inc:0,dmg_red:7.0,mg_crit_res:19.5,wg_crit:37.8,wg_crit_res:19.25,ms_crit:37.8,ms_crit_res:21,mg_crit_dmg:82,mg_crit_dmg_res:25.4,wg_crit_dmg:82,wg_crit_dmg_res:28.1,ms_crit_dmg:83,ms_crit_dmg_res:27.9,
+    drones:[{name:'Naga',level:93,type:'reflect',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'Apus',level:84,type:'reflect',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'Grus',level:86,type:'reflect',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0}]},
+  DeezNutz404:{mg_atk:204139,wg_atk:230117,ms_atk:282835,hp:603484,crit:65.65,dodge:194.98,crit_res:106.00,hit:209.35,pdb:2073,pd:1936,edb:2169,ed:1942,pvp_inc:37.00,pvp_red:30.45,aerial_inc:58.95,aerial_red:76.55,ground_inc:14.0,ground_red:26.4,fid_inc:4.70,fid_dec:21.95,elec_enh:21.4,burn_enh:33.7,reflect_enh:31.3,elec_dec:83.52,burn_dec:70.4,reflect_dec:81.0,sentinel_enh:60.8,sentinel_dec:16.2,heal_enh:21.2,heal_dec:45.0,dmg_inc:0,dmg_red:6.0,mg_crit_res:16.25,wg_crit:23.2,wg_crit_res:16.25,ms_crit:37.2,ms_crit_res:20,mg_crit_dmg:54,mg_crit_dmg_res:20.1,wg_crit_dmg:47,wg_crit_dmg_res:20.1,ms_crit_dmg:82,ms_crit_dmg_res:19.4,
+    drones:[{name:'Apus',level:123,type:'reflect',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:7},{name:'Ninja',level:200,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'Grus',level:62,type:'reflect',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0}]},
+  Kyosan:     {mg_atk:162518,wg_atk:199585,ms_atk:201152,hp:680684,crit:203.31,dodge:49.82,crit_res:85.54,hit:231.96,pdb:2245,pd:2186,edb:1899,ed:1884,pvp_inc:38.73,pvp_red:36.85,aerial_inc:63.75,aerial_red:90.54,ground_inc:13.6,ground_red:11.6,fid_inc:3.34,fid_dec:30.74,elec_enh:29.05,burn_enh:62.42,reflect_enh:25.85,elec_dec:75.86,burn_dec:74.17,reflect_dec:71.63,sentinel_enh:21.71,sentinel_dec:14.1,heal_enh:150.31,heal_dec:18.52,dmg_inc:0,dmg_red:20.68,mg_crit_res:22,wg_crit:32.2,wg_crit_res:16,ms_crit:37.2,ms_crit_res:22,mg_crit_dmg:82,mg_crit_dmg_res:28.5,wg_crit_dmg:72,wg_crit_dmg_res:9,ms_crit_dmg:84,ms_crit_dmg_res:29,
+    drones:[{name:'Apus',level:96,type:'reflect',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'Unicorn',level:165,type:'reflect',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'Sagittarius',level:96,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0}]},
+  ToiletHands:{hit:217.1,crit:175.66,pdb:2152,pd:2763,edb:2838,ed:2281,pvp_inc:37.6,pvp_red:34.35,aerial_inc:67.35,aerial_red:99.27,ground_inc:46.8,ground_red:20.4,fid_inc:6.2,fid_dec:25.05,elec_enh:0,burn_enh:0,reflect_enh:0,elec_dec:88.6,burn_dec:88.9,reflect_dec:88.7,sentinel_enh:0,sentinel_dec:0,heal_enh:0,heal_dec:0,dmg_inc:0,dmg_red:0,
+    drones:[{name:'?',level:0,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'?',level:0,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0},{name:'?',level:0,type:'burn',dmgBoost:0,physBoost:0,energyBoost:0,naBoost:0,skillBoost:0,etr:0,tr:0,resistBoost:0}]},
+};
+
+const ATK_DB = {};
+for(const [k,v] of Object.entries(ATK_TEMPLATES)){
+  const entry=JSON.parse(JSON.stringify(v));
+  if(entry.crit_dmg==null) entry.crit_dmg=200;
+  ATK_DB[k]=entry;
+}
+
+const WEEKS_SEED = {};
+WEEKS_SEED['wf071926'] = [
+  {name:'Kage無双',      label:'B5',bp:64070540,mg_atk:350872,wg_atk:369408,ms_atk:421671,hp:1375878,crit:87.2,dodge:286.26,elec_enh:53,burn_enh:62.1,reflect_enh:54.2,crit_res:185.31,hit:264.58,elec_dec:110.6,burn_dec:105.7,reflect_dec:106.5,pdb:2729,pd:3384,edb:3385,ed:3037,fid_inc:10.4,fid_dec:42.8,sentinel_enh:39.8,sentinel_dec:31.6,heal_enh:97.9,heal_dec:196.1,dmg_inc:0,dmg_red:14,pvp_inc:39.55,pvp_red:39.75,aerial_inc:68.95,aerial_red:102.64,drones:[{name:'Fornax',level:140,type:'burn',resistBoost:0},{name:'Sagittarius',level:200,type:'burn',resistBoost:0},{name:'Lyra',level:144,type:'burn',resistBoost:0}]},
+  {name:'撲殺の天使',    label:'B3',bp:63522768,mg_atk:338720,wg_atk:374628,ms_atk:370389,hp:1406927,crit:95.9,dodge:287.65,elec_enh:48,burn_enh:64,reflect_enh:44.6,crit_res:151.49,hit:254.72,elec_dec:100.5,burn_dec:106.1,reflect_dec:103.1,pdb:3188,pd:3170,edb:2693,ed:3020,fid_inc:8.8,fid_dec:40.3,sentinel_enh:38.8,sentinel_dec:155.4,heal_enh:125.4,heal_dec:102.6,dmg_inc:0,dmg_red:27,pvp_inc:37.05,pvp_red:36.45,aerial_inc:67.15,aerial_red:103.44,drones:[{name:'Sagittarius',level:200,type:'burn',resistBoost:0},{name:'Lyra',level:94,type:'burn',resistBoost:0},{name:'Fornax',level:166,type:'burn',resistBoost:0}]},
+  {name:'ごまちゃん',    label:'B2',bp:56980788,mg_atk:327753,wg_atk:362246,ms_atk:359370,hp:1214504,crit:79.2,dodge:308.86,elec_enh:43,burn_enh:45.9,reflect_enh:43.7,crit_res:155.08,hit:194.9,elec_dec:123.16,burn_dec:97.3,reflect_dec:145.57,pdb:3108,pd:3119,edb:2566,ed:2606,fid_inc:7.1,fid_dec:30.0,sentinel_enh:28,sentinel_dec:22.4,heal_enh:213.2,heal_dec:135,dmg_inc:0,dmg_red:7,pvp_inc:39,pvp_red:38.65,aerial_inc:67.75,aerial_red:104.92,drones:[{name:'Draco',level:139,type:'elec',resistBoost:0},{name:'Aquila',level:164,type:'elec',resistBoost:0},{name:'Orion',level:139,type:'elec',resistBoost:0}]},
+  {name:'ぷりん',        label:'B1',bp:56618601,mg_atk:317105,wg_atk:349654,ms_atk:350078,hp:1211690,crit:91.4,dodge:318.57,elec_enh:60.1,burn_enh:72,reflect_enh:59.3,crit_res:249.7,hit:181.4,elec_dec:141.05,burn_dec:112.3,reflect_dec:111.4,pdb:3213,pd:3111,edb:2737,ed:2804,fid_inc:11.85,fid_dec:44.6,sentinel_enh:69.2,sentinel_dec:39.5,heal_enh:114.4,heal_dec:72.3,dmg_inc:0,dmg_red:14,pvp_inc:40.3,pvp_red:38.15,aerial_inc:71.75,aerial_red:102.52,drones:[{name:'Scorpion lion',level:200,type:'burn',resistBoost:0},{name:'Sagittarius',level:126,type:'burn',resistBoost:0},{name:'Apus',level:146,type:'reflect',resistBoost:0}]},
+  {name:'ナディアSS',    label:'C3',bp:50850765,dodge:106.5, crit_res:198.52,fid_dec:50.7, burn_dec:127.0, elec_dec:128.88,reflect_dec:null,pvp_red:40.65,aerial_red:109.69,ground_red:null, pdb:2986,pd:3059,edb:null,ed:2819,  sentinel_enh:49.2,heal_dec:null,sentinel_dec:null,hit:null,crit:null,pvp_inc:null,aerial_inc:null,ground_inc:null,drones:[{name:'Sagittarius',level:200,type:'burn',resistBoost:0},{name:'Lyra',level:94,type:'burn',resistBoost:0},{name:'Fornax',level:166,type:'burn',resistBoost:7}]},
+  {name:'nakiemo',       label:'D2',bp:42047312,dodge:90.5,  crit_res:190.74,fid_dec:28.95,burn_dec:121.2, elec_dec:89.9,  reflect_dec:null,pvp_red:37.8, aerial_red:88.52, ground_red:null, pdb:2423,pd:2402,edb:null,ed:2147,  sentinel_enh:null,heal_dec:null,sentinel_dec:null,hit:null,crit:null,pvp_inc:null,aerial_inc:null,ground_inc:null,drones:[{name:'Cerberus',level:179,type:'burn',resistBoost:0},{name:'Sentry',level:200,type:'reflect',resistBoost:0},{name:'Ninja',level:200,type:'burn',resistBoost:0}]},
+  {name:'あああああああ',label:'D4',bp:40990297,dodge:304.73,crit_res:224.41,fid_dec:21.7, burn_dec:79.7,  elec_dec:82.5,  reflect_dec:null,pvp_red:34.55,aerial_red:100.6, ground_red:null, pdb:2532,pd:2497,edb:null,ed:2179,  sentinel_enh:97.9,heal_dec:80.8,sentinel_dec:null,hit:null,crit:null,pvp_inc:null,aerial_inc:null,ground_inc:null,drones:[{name:'Apus',level:108,type:'reflect',resistBoost:5},{name:'Fornax',level:149,type:'burn',resistBoost:0},{name:'Sagittarius',level:126,type:'burn',resistBoost:0}]},
+  {name:'銀造',          label:'C1',bp:40040712,dodge:285.58,crit_res:148.96,fid_dec:35.95,burn_dec:89.4,  elec_dec:88.6,  reflect_dec:null,pvp_red:35.4, aerial_red:89.96, ground_red:null, pdb:2481,pd:2523,edb:2147,ed:2274,  sentinel_enh:73.9,heal_dec:21.5,sentinel_dec:null,hit:null,crit:null,pvp_inc:null,aerial_inc:null,ground_inc:null,drones:[{name:'Sagittarius',level:130,type:'burn',resistBoost:0},{name:'Lyra',level:130,type:'burn',resistBoost:0},{name:'Fornax',level:130,type:'burn',resistBoost:0}]},
+  {name:'野生の株トレ三昧',label:'B4',bp:40001200,mg_atk:281892,wg_atk:324551,ms_atk:317846,hp:997812,crit:133.32,dodge:175.04,elec_enh:38.5,burn_enh:76.53,reflect_enh:35.1,crit_res:173.67,hit:190.84,elec_dec:82.7,burn_dec:83.8,reflect_dec:97.04,pdb:1631,pd:2598,edb:2277,ed:2346,fid_inc:5.3,fid_dec:30.4,sentinel_enh:21.4,sentinel_dec:21.5,heal_enh:24.9,heal_dec:23.2,dmg_inc:0,dmg_red:14,pvp_inc:38.1,pvp_red:34.6,aerial_inc:65.9,aerial_red:91.55,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'右京',          label:'D5',bp:39800282,dodge:181.85,crit_res:162.78,fid_dec:28.45,burn_dec:100.01,elec_dec:90.9, reflect_dec:null,pvp_red:35.7, aerial_red:96.89, ground_red:null, pdb:2476,pd:2503,edb:null,ed:2220,  sentinel_enh:28.6,heal_dec:20.9,sentinel_dec:null,hit:null,crit:null,pvp_inc:null,aerial_inc:null,ground_inc:null,drones:[{name:'Lyra',level:126,type:'burn',resistBoost:0},{name:'Sagittarius',level:126,type:'burn',resistBoost:0},{name:'Fornax',level:125,type:'burn',resistBoost:0}]},
+  {name:'テツヤ',        label:'D3',bp:38143225,dodge:301.59,crit_res:131.7, fid_dec:28.65,burn_dec:74.8,  elec_dec:82.6,  reflect_dec:110.21,pvp_red:35.15,aerial_red:98.0,ground_red:26.3,pdb:2091,pd:2437,edb:2531,ed:2167,sentinel_enh:25.9,heal_dec:23.5,sentinel_dec:22.6,hit:null,crit:null,pvp_inc:null,aerial_inc:null,ground_inc:null,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'バスキー',      label:'D1',bp:36768180,dodge:90.72, crit_res:119.83,fid_dec:24.85,burn_dec:92.54, elec_dec:96.98, reflect_dec:null,pvp_red:35.65,aerial_red:87.81, ground_red:null, pdb:2234,pd:2174,edb:null,ed:null,   sentinel_enh:24.1,heal_dec:41.4,sentinel_dec:null,hit:null,crit:null,pvp_inc:null,aerial_inc:null,ground_inc:null,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'ランランサクラ',label:'A1',bp:33708252,mg_atk:267227,wg_atk:297327,ms_atk:346497,hp:906535,crit:453.8,dodge:270.22,elec_enh:23.1,burn_enh:33.4,reflect_enh:32.1,crit_res:83.8,hit:181.47,elec_dec:100.6,burn_dec:86.32,reflect_dec:86.23,pdb:1886,pd:2087,edb:2321,ed:2328,fid_inc:3.15,fid_dec:29.05,sentinel_enh:13.7,sentinel_dec:7.3,heal_enh:17.7,heal_dec:155.3,dmg_inc:0,dmg_red:0,pvp_inc:33.3,pvp_red:39.25,aerial_inc:64.55,aerial_red:97.72,drones:[{name:'Apus',level:168,type:'reflect',resistBoost:0},{name:'Fornax',level:86,type:'burn',resistBoost:0},{name:'Knight',level:200,type:'reflect',resistBoost:0}]},
+  {name:'なるせ553',     label:'C2',bp:28930593,dodge:141.29,crit_res:84.34, fid_dec:16.2, burn_dec:100.83,elec_dec:75.86, reflect_dec:null,pvp_red:13.6, aerial_red:73.02, ground_red:null, pdb:1851,pd:1894,edb:null,ed:1823,   sentinel_enh:133.4,heal_dec:14.4,sentinel_dec:null,hit:null,crit:null,pvp_inc:null,aerial_inc:null,ground_inc:null,drones:[{name:'Apus',level:100,type:'reflect',resistBoost:2},{name:'Gladiator',level:200,type:'burn',resistBoost:0},{name:'Lyra',level:154,type:'burn',resistBoost:0}]},
+  {name:'ぽこはち',      label:'C4',bp:16978310,dodge:285.3, crit_res:194.03,fid_dec:28.7, burn_dec:83.8,  elec_dec:83.3,  reflect_dec:null,pvp_red:37.75,aerial_red:97.07, ground_red:null, pdb:2322,pd:2630,edb:null,ed:null,   sentinel_enh:null,heal_dec:73.2,sentinel_dec:null,hit:null,crit:null,pvp_inc:null,aerial_inc:null,ground_inc:null,drones:[{name:'Apus',level:128,type:'reflect',resistBoost:7},{name:'Grus',level:125,type:'reflect',resistBoost:4},{name:'Fornax',level:125,type:'burn',resistBoost:0}]},
+  {name:'ポインター',    label:'C5',bp:385670,  dodge:null,  crit_res:null,  fid_dec:null, burn_dec:null,   elec_dec:null,   reflect_dec:null,pvp_red:null, aerial_red:null,  ground_red:null, pdb:null,pd:null,  edb:null,ed:null,   sentinel_enh:null,heal_dec:null, sentinel_dec:null,hit:null,crit:null,pvp_inc:null,aerial_inc:null,ground_inc:null,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+];
+WEEKS_SEED['wf072626'] = [
+  {name:'Tiroloс',      label:null,bp:71882720,mg_atk:384129,wg_atk:398917,ms_atk:417749,hp:1299834,crit:94.20,dodge:342.59,elec_enh:57.60,burn_enh:66.70,reflect_enh:66.70,crit_res:293.20,hit:134.80,elec_dec:113.00,burn_dec:161.30,reflect_dec:116.30,pdb:3481,pd:3622,edb:3016,ed:3231,fid_inc:10.55,fid_dec:44.15,sentinel_enh:41.10,sentinel_dec:35.10,heal_enh:210.60,heal_dec:115.80,dmg_inc:0,dmg_red:21,pvp_inc:45.00,pvp_red:42.00,aerial_inc:69.35,aerial_red:108.51,mg_crit_res:27.00,wg_crit:39.00,wg_crit_res:27.00,ms_crit:40.20,ms_crit_res:27.00,mg_crit_dmg:96.00,mg_crit_dmg_res:33.20,wg_crit_dmg:90.00,wg_crit_dmg_res:32.00,ms_crit_dmg:92.00,ms_crit_dmg_res:33.20,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'Håyaßuşa',    label:null,bp:45978987,mg_atk:305184,wg_atk:324600,ms_atk:378244,hp:1055460,crit:63.20,dodge:326.61,elec_enh:34.80,burn_enh:41.80,reflect_enh:59.20,crit_res:156.24,hit:241.51,elec_dec:94.70,burn_dec:95.10,reflect_dec:92.50,pdb:2258,pd:2752,edb:2828,ed:2369,fid_inc:4.15,fid_dec:25.95,sentinel_enh:24.40,sentinel_dec:24.10,heal_enh:23.90,heal_dec:15.80,dmg_inc:0,dmg_red:0,pvp_inc:45.00,pvp_red:40.80,aerial_inc:73.00,aerial_red:104.13,mg_crit_res:22.00,wg_crit:40.20,wg_crit_res:22.00,ms_crit:39.60,ms_crit_res:22.00,mg_crit_dmg:87.00,mg_crit_dmg_res:31.40,wg_crit_dmg:87.00,wg_crit_dmg_res:27.80,ms_crit_dmg:87.00,ms_crit_dmg_res:29.60,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'Oni†kage',    label:null,bp:45949963,mg_atk:317067,wg_atk:342513,ms_atk:391740,hp:1124224,crit:255.49,dodge:61.80,elec_enh:40.60,burn_enh:44.20,reflect_enh:35.80,crit_res:161.70,hit:296.16,elec_dec:93.50,burn_dec:84.70,reflect_dec:89.60,pdb:2295,pd:2836,edb:3017,ed:2554,fid_inc:3.65,fid_dec:33.95,sentinel_enh:28.00,sentinel_dec:27.10,heal_enh:24.40,heal_dec:21.10,dmg_inc:0,dmg_red:25,pvp_inc:38.75,pvp_red:42.30,aerial_inc:70.20,aerial_red:104.44,mg_crit_res:25.00,wg_crit:39.60,wg_crit_res:25.00,ms_crit:39.60,ms_crit_res:24.00,mg_crit_dmg:85.00,mg_crit_dmg_res:31.40,wg_crit_dmg:87.00,wg_crit_dmg_res:32.60,ms_crit_dmg:87.00,ms_crit_dmg_res:35.60,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'Adversary',   label:null,bp:42407299,mg_atk:280726,wg_atk:296050,ms_atk:316220,hp:1060656,crit:260.21,dodge:60.60,elec_enh:35.10,burn_enh:32.50,reflect_enh:29.40,crit_res:117.10,hit:290.78,elec_dec:94.50,burn_dec:95.60,reflect_dec:95.60,pdb:2781,pd:2881,edb:2408,ed:2560,fid_inc:4.75,fid_dec:26.75,sentinel_enh:24.90,sentinel_dec:96.60,heal_enh:16.20,heal_dec:24.20,dmg_inc:0,dmg_red:25,pvp_inc:44.20,pvp_red:40.00,aerial_inc:73.00,aerial_red:106.25,mg_crit:38.40,mg_crit_res:25.00,wg_crit:37.80,wg_crit_res:22.00,ms_crit:38.40,ms_crit_res:24.00,mg_crit_dmg:87.00,mg_crit_dmg_res:29.60,wg_crit_dmg:82.00,wg_crit_dmg_res:27.50,ms_crit_dmg:85.00,ms_crit_dmg_res:29.00,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'SunDowner',   label:null,bp:40554704,mg_atk:235703,wg_atk:273988,ms_atk:293070,hp:1228095,crit:255.53,dodge:55.90,elec_enh:24.60,burn_enh:34.70,reflect_enh:25.80,crit_res:114.58,hit:205.92,elec_dec:103.10,burn_dec:113.21,reflect_dec:81.70,pdb:2457,pd:2508,edb:2115,ed:2104,fid_inc:4.25,fid_dec:39.30,sentinel_enh:63.00,sentinel_dec:14.60,heal_enh:195.20,heal_dec:15.00,dmg_inc:0,dmg_red:23,pvp_inc:35.35,pvp_red:33.10,aerial_inc:59.55,aerial_red:90.89,mg_crit_res:23.00,wg_crit:37.20,wg_crit_res:21.00,ms_crit:38.40,ms_crit_res:25.00,mg_crit_dmg:79.00,mg_crit_dmg_res:29.60,wg_crit_dmg:82.00,wg_crit_dmg_res:28.40,ms_crit_dmg:84.00,ms_crit_dmg_res:29.60,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'mast3r',      label:null,bp:40412882,mg_atk:244768,wg_atk:318206,ms_atk:357093,hp:977463,crit:60.00,dodge:286.36,elec_enh:34.00,burn_enh:41.30,reflect_enh:48.10,crit_res:263.40,hit:100.00,elec_dec:89.30,burn_dec:87.70,reflect_dec:118.40,pdb:2124,pd:2478,edb:2567,ed:2148,fid_inc:3.40,fid_dec:24.45,sentinel_enh:23.80,sentinel_dec:17.40,heal_enh:119.90,heal_dec:15.20,dmg_inc:0,dmg_red:0,pvp_inc:45.75,pvp_red:36.90,aerial_inc:67.20,aerial_red:97.41,mg_crit_res:22.00,wg_crit:37.20,wg_crit_res:16.00,ms_crit:37.20,ms_crit_res:23.00,mg_crit_dmg:82.00,mg_crit_dmg_res:27.40,wg_crit_dmg:82.00,wg_crit_dmg_res:18.40,ms_crit_dmg:82.00,ms_crit_dmg_res:29.60,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'8man',        label:null,bp:39720344,mg_atk:249966,wg_atk:294453,ms_atk:303305,hp:890538,crit:80.80,dodge:315.61,elec_enh:37.60,burn_enh:47.40,reflect_enh:54.10,crit_res:199.46,hit:266.79,elec_dec:102.60,burn_dec:100.40,reflect_dec:102.40,pdb:2781,pd:2752,edb:2294,ed:2579,fid_inc:7.80,fid_dec:33.30,sentinel_enh:31.00,sentinel_dec:27.40,heal_enh:130.40,heal_dec:28.90,dmg_inc:0,dmg_red:0,pvp_inc:42.00,pvp_red:37.10,aerial_inc:68.40,aerial_red:100.83,mg_crit_res:22.00,wg_crit:38.40,wg_crit_res:23.00,ms_crit:38.40,ms_crit_res:26.00,mg_crit_dmg:86.00,mg_crit_dmg_res:31.40,wg_crit_dmg:84.00,wg_crit_dmg_res:31.40,ms_crit_dmg:86.00,ms_crit_dmg_res:31.40,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'Fernflour',   label:null,bp:38452301,mg_atk:266127,wg_atk:261918,ms_atk:314462,hp:966540,crit:259.29,dodge:77.70,elec_enh:37.10,burn_enh:40.80,reflect_enh:30.60,crit_res:147.80,hit:211.79,elec_dec:105.60,burn_dec:81.50,reflect_dec:82.80,pdb:2617,pd:2544,edb:2141,ed:2345,fid_inc:3.80,fid_dec:29.45,sentinel_enh:25.70,sentinel_dec:20.20,heal_enh:19.10,heal_dec:186.60,dmg_inc:0,dmg_red:25,pvp_inc:42.55,pvp_red:41.60,aerial_inc:68.35,aerial_red:101.07,mg_crit_res:19.00,wg_crit:37.20,wg_crit_res:19.75,ms_crit:38.40,ms_crit_res:22.00,mg_crit_dmg:82.00,mg_crit_dmg_res:28.40,wg_crit_dmg:80.00,wg_crit_dmg_res:18.40,ms_crit_dmg:80.00,ms_crit_dmg_res:29.00,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'Gawain',      label:null,bp:36078919,mg_atk:278221,wg_atk:261125,ms_atk:306198,hp:964450,crit:80.23,dodge:142.85,elec_enh:43.60,burn_enh:127.68,reflect_enh:61.75,crit_res:109.68,hit:196.05,elec_dec:111.87,burn_dec:127.53,reflect_dec:83.00,pdb:2172,pd:2329,edb:2327,ed:2136,fid_inc:6.35,fid_dec:34.95,sentinel_enh:59.10,sentinel_dec:21.10,heal_enh:23.70,heal_dec:20.30,dmg_inc:0,dmg_red:0,pvp_inc:39.20,pvp_red:35.15,aerial_inc:65.55,aerial_red:94.12,mg_crit_res:21.00,wg_crit:36.60,wg_crit_res:18.50,ms_crit:37.20,ms_crit_res:18.75,mg_crit_dmg:83.00,mg_crit_dmg_res:28.40,wg_crit_dmg:80.00,wg_crit_dmg_res:24.90,ms_crit_dmg:80.00,ms_crit_dmg_res:28.40,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'Dre719',      label:null,bp:34847011,mg_atk:240367,wg_atk:283592,ms_atk:326454,hp:882390,crit:89.40,dodge:187.24,elec_enh:35.10,burn_enh:152.25,reflect_enh:38.70,crit_res:142.36,hit:185.81,elec_dec:84.80,burn_dec:93.42,reflect_dec:106.51,pdb:2303,pd:2134,edb:2447,ed:2140,fid_inc:4.25,fid_dec:23.55,sentinel_enh:24.80,sentinel_dec:17.10,heal_enh:24.70,heal_dec:18.40,dmg_inc:0,dmg_red:13,pvp_inc:40.00,pvp_red:37.45,aerial_inc:61.55,aerial_red:83.62,mg_crit_res:21.00,wg_crit:37.20,wg_crit_res:21.00,ms_crit:37.20,ms_crit_res:20.00,mg_crit_dmg:85.00,mg_crit_dmg_res:28.40,wg_crit_dmg:82.00,wg_crit_dmg_res:28.40,ms_crit_dmg:80.00,ms_crit_dmg_res:27.90,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'pdp1',        label:null,bp:34643365,mg_atk:222950,wg_atk:246134,ms_atk:287780,hp:1005314,crit:255.09,dodge:68.40,elec_enh:37.90,burn_enh:32.70,reflect_enh:35.30,crit_res:183.84,hit:236.02,elec_dec:82.00,burn_dec:106.30,reflect_dec:83.40,pdb:2454,pd:2519,edb:2024,ed:2081,fid_inc:4.90,fid_dec:29.95,sentinel_enh:22.90,sentinel_dec:16.80,heal_enh:19.30,heal_dec:14.60,dmg_inc:0,dmg_red:18,pvp_inc:39.35,pvp_red:36.35,aerial_inc:65.80,aerial_red:94.97,mg_crit_res:20.25,wg_crit:37.80,wg_crit_res:20.75,ms_crit:38.40,ms_crit_res:20.00,mg_crit_dmg:80.00,mg_crit_dmg_res:27.60,wg_crit_dmg:80.00,wg_crit_dmg_res:28.50,ms_crit_dmg:85.00,ms_crit_dmg_res:28.40,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'goju',        label:null,bp:28136388,mg_atk:231342,wg_atk:238854,ms_atk:268768,hp:798184,crit:90.40,dodge:191.67,elec_enh:35.20,burn_enh:36.00,reflect_enh:41.50,crit_res:126.19,hit:199.58,elec_dec:112.80,burn_dec:95.82,reflect_dec:91.94,pdb:2076,pd:1895,edb:2005,ed:1831,fid_inc:2.80,fid_dec:24.55,sentinel_enh:25.50,sentinel_dec:19.20,heal_enh:22.80,heal_dec:41.50,dmg_inc:0,dmg_red:7,pvp_inc:34.95,pvp_red:32.75,aerial_inc:48.20,aerial_red:63.45,mg_crit_res:22.00,wg_crit:18.20,wg_crit_res:9.75,ms_crit:23.60,ms_crit_res:17.00,mg_crit_dmg:81.00,mg_crit_dmg_res:25.40,wg_crit_dmg:25.00,wg_crit_dmg_res:17.20,ms_crit_dmg:82.00,ms_crit_dmg_res:25.40,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'redHiPP',     label:null,bp:25269940,mg_atk:193993,wg_atk:140656,ms_atk:193671,hp:609461,crit:66.50,dodge:273.45,elec_enh:37.50,burn_enh:47.60,reflect_enh:41.10,crit_res:177.87,hit:161.30,elec_dec:88.90,burn_dec:134.83,reflect_dec:101.80,pdb:2424,pd:2223,edb:2385,ed:2111,fid_inc:5.95,fid_dec:28.50,sentinel_enh:74.10,sentinel_dec:21.60,heal_enh:182.40,heal_dec:19.60,dmg_inc:0,dmg_red:18,pvp_inc:34.95,pvp_red:33.95,aerial_inc:62.90,aerial_red:89.59,mg_crit_res:24.00,wg_crit:37.80,wg_crit_res:20.00,ms_crit:37.80,ms_crit_res:24.00,mg_crit_dmg:86.00,mg_crit_dmg_res:28.40,wg_crit_dmg:82.00,wg_crit_dmg_res:23.10,ms_crit_dmg:85.00,ms_crit_dmg_res:29.60,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'SixCr3t',     label:null,bp:12049588,mg_atk:129734,wg_atk:135067,ms_atk:164191,hp:366253,crit:52.80,dodge:227.58,elec_enh:23.70,burn_enh:60.20,reflect_enh:29.90,crit_res:95.44,hit:168.55,elec_dec:68.30,burn_dec:65.00,reflect_dec:67.90,pdb:1410,pd:1285,edb:1473,ed:1238,fid_inc:2.20,fid_dec:25.95,sentinel_enh:21.40,sentinel_dec:65.30,heal_enh:18.20,heal_dec:14.50,dmg_inc:0,dmg_red:5,pvp_inc:21.95,pvp_red:22.35,aerial_inc:34.55,aerial_red:43.48,mg_crit_res:8.00,wg_crit:10.80,wg_crit_res:0.00,ms_crit:22.00,ms_crit_res:0.00,mg_crit_dmg:58.50,mg_crit_dmg_res:5.40,wg_crit_dmg:22.50,wg_crit_dmg_res:5.40,ms_crit_dmg:60.00,ms_crit_dmg_res:5.40,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'BubbleBee505',label:null,bp:9279822, mg_atk:112037,wg_atk:68647, ms_atk:125818,hp:278513, crit:68.40,dodge:234.11,elec_enh:26.00,burn_enh:21.90,reflect_enh:32.40,crit_res:149.96,hit:162.24,elec_dec:69.20,burn_dec:69.40,reflect_dec:66.60,pdb:1283,pd:1499,edb:1312,ed:1421,fid_inc:2.85,fid_dec:16.20,sentinel_enh:14.60,sentinel_dec:15.10,heal_enh:75.70,heal_dec:79.50,dmg_inc:0,dmg_red:9, pvp_inc:27.15,pvp_red:23.30,aerial_inc:23.50,aerial_red:42.54,mg_crit_res:10.00,wg_crit:7.05,wg_crit_res:0.50,ms_crit:13.20,ms_crit_res:5.75,mg_crit_dmg:72.00,mg_crit_dmg_res:14.80,wg_crit_dmg:9.00,wg_crit_dmg_res:4.50,ms_crit_dmg:70.00,ms_crit_dmg_res:13.10,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+  {name:'Bluediament', label:null,bp:9079419, mg_atk:91059, wg_atk:72872, ms_atk:106812,hp:412199, crit:47.90,dodge:261.20,elec_enh:29.60,burn_enh:37.50,reflect_enh:31.10,crit_res:123.66,hit:110.11,elec_dec:76.85,burn_dec:93.98,reflect_dec:102.47,pdb:1107,pd:1193,edb:1103,ed:1183,fid_inc:1.80,fid_dec:21.35,sentinel_enh:17.80,sentinel_dec:14.80,heal_enh:17.00,heal_dec:99.20,dmg_inc:0,dmg_red:6, pvp_inc:23.85,pvp_red:19.10,aerial_inc:31.35,aerial_red:32.28,mg_crit_res:5.00,wg_crit:14.75,wg_crit_res:8.75,ms_crit:13.20,ms_crit_res:4.50,mg_crit_dmg:12.50,mg_crit_dmg_res:9.30,wg_crit_dmg:20.50,wg_crit_dmg_res:14.60,ms_crit_dmg:14.00,ms_crit_dmg_res:13.50,drones:[{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0},{name:'?',level:0,type:'burn',resistBoost:0}]},
+];
+
+function deepCloneSeed(weekId) {
+  return (WEEKS_SEED[weekId] || []).map(e => JSON.parse(JSON.stringify(e)));
+}
+let ENEMIES = deepCloneSeed(currentWeek);
+
+let currentAtk = 'jackclown';
+let expandedEnemy = null;
+let calcMode = 'simple'; // 'simple' | 'full'
+let sortCol = 'dps', sortDir = -1;
+
+function sortBy(col){
+  if(sortCol===col) sortDir*=-1; else{sortCol=col;sortDir=-1;}
+  render();
+}
+
+function nextInput(el){
+  const sel='.sf input,.num';
+  const i=[...document.querySelectorAll(sel)].indexOf(el);
+  el.blur(); // may trigger render() and rebuild DOM
+  if(i>=0){const all=[...document.querySelectorAll(sel)];if(i+1<all.length)all[i+1].focus();}
+}
+
+// ═══════════════════════════════════════
+//  FORMULAS
+// ═══════════════════════════════════════
+const F = x => x>=0?1+x:1/(1+Math.abs(x));
+const hitPct  = (h,d)  => Math.min(80,Math.max(20,100+h-d));
+const critPct = (c,cr) => Math.min(80,Math.max(0,c-cr));
+const clamp   = (v,mn,mx) => Math.min(mx,Math.max(mn,v));
+const fidM    = (fi,fd) => { const fid=100+(fi||0)-(fd||0); return fid>=50?fid/100:50/(100+2*(50-fid)); };
+const droneED = (enh,dd) => dd==null?null:clamp((100+enh-dd)/100,1,2);
+const DSMCoeff = 0.0061873;
+
+function droneNAIR(atk,slotIdx,enemy){
+  const d=atk.drones[slotIdx];
+  const yourBoost=atk.drones.reduce((s,dr)=>s+(dr.dmgBoost||0),0);
+  const wpType=document.getElementById('wpType').value;
+  const extra=(wpType==='phys'?(d.physBoost||0):(d.energyBoost||0))+(d.naBoost||0);
+  const enemyResist=enemy.drones.reduce((s,dr)=>s+(dr.resistBoost||0),0);
+  return yourBoost-enemyResist+extra;
+}
+function droneSKIR(atk,slotIdx,enemy){
+  const d=atk.drones[slotIdx];
+  const yourBoost=atk.drones.reduce((s,dr)=>s+(dr.dmgBoost||0),0);
+  const enemyResist=enemy.drones.reduce((s,dr)=>s+(dr.resistBoost||0),0);
+  return yourBoost-enemyResist+(d.skillBoost||0);
+}
+
+// ═══════════════════════════════════════
+//  FIREBASE SYNC
+// ═══════════════════════════════════════
+let db = null;
+let nickname = localStorage.getItem('wf_nickname') || '';
+let ignoreNextRemote = false; // suppress echo of own write
+let writeTimer = null;
+let activeListener = null; // DB_PATH currently subscribed
+
+function syncDot(cls, msg) {
+  const dot = document.getElementById('syncDot');
+  dot.className = 'sync-dot' + (cls?' '+cls:'');
+  document.getElementById('syncMsg').textContent = msg;
+}
+
+function isCurrentWeek() {
+  return currentWeek === WEEKS[WEEKS.length - 1].id;
+}
+
+function attachFirebaseListener() {
+  if (!db) return;
+  if (activeListener) db.ref(activeListener).off('value');
+  activeListener = currentWeek;
+  syncDot('', 'Connecting…');
+
+  db.ref(currentWeek).on('value', snap => {
+    const data = snap.val();
+    if (!data) { syncDot('live', 'Live — no saved state yet'); return; }
+    if (ignoreNextRemote) { ignoreNextRemote = false; return; }
+
+    // Apply remote state — atkDB only for current week
+    if (isCurrentWeek() && data.atkDB) {
+      for (const [k,v] of Object.entries(data.atkDB)) {
+        if (ATK_DB[k]) Object.assign(ATK_DB[k], v);
+      }
+    }
+    if (data.enemies && Array.isArray(data.enemies)) {
+      // Replace ENEMIES in-place from remote
+      ENEMIES.length = 0;
+      data.enemies.forEach(e => ENEMIES.push(e));
+    }
+    buildAtkPanel();
+    buildDronePanel();
+    render();
+
+    const who = data.savedBy || 'teammate';
+    const when = data.savedAt ? new Date(data.savedAt).toLocaleTimeString() : '';
+    const roNote = isCurrentWeek() ? '' : ' · read-only';
+    syncDot('live', `Live · last saved by ${who} at ${when}${roNote}`);
+  }, err => {
+    syncDot('err', `Firebase error: ${err.message}`);
+  });
+}
+
+function updateHeader() {
+  const w = WEEKS.find(w => w.id === currentWeek);
+  const label = w.id.slice(2); // e.g. "072626"
+  document.getElementById('pageTitle').textContent = `⚔ WF ${label} – Damage Calculator`;
+  document.getElementById('pageSubtitle').textContent = `The Astral Vanguard vs ${w.clan}`;
+  document.title = `WF ${label} – Damage Calculator`;
+}
+
+function switchWeek(weekId) {
+  if (weekId === currentWeek) return;
+  clearTimeout(writeTimer);
+  currentWeek = weekId;
+  updateHeader();
+  // Reset ENEMIES to seed while Firebase loads
+  ENEMIES.length = 0;
+  deepCloneSeed(weekId).forEach(e => ENEMIES.push(e));
+  attachFirebaseListener();
+  render();
+  // Visual hint for historical weeks
+  document.getElementById('weekReadOnly').style.display = isCurrentWeek() ? 'none' : '';
+}
+
+function setCalcMode(m) {
+  calcMode = m;
+  document.getElementById('dronePanel').style.display = m === 'full' ? '' : 'none';
+  const tbl = document.getElementById('mainTable');
+  if (m === 'full') tbl.classList.remove('no-drone');
+  else tbl.classList.add('no-drone');
+  render();
+}
+
+function buildWeekSelector() {
+  const sel = document.getElementById('weekSel');
+  sel.innerHTML = WEEKS.map(w =>
+    `<option value="${w.id}"${w.id===currentWeek?' selected':''}>${w.label}</option>`
+  ).join('');
+}
+
+function initFirebase() {
+  if (FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY') {
+    document.getElementById('cfgWarn').style.display = '';
+    syncDot('err', 'Firebase not configured — see instructions at top of file');
+    return;
+  }
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+    attachFirebaseListener();
+  } catch(e) {
+    syncDot('err', `Firebase init failed: ${e.message}`);
+  }
+}
+
+function scheduleWrite() {
+  if (!isCurrentWeek()) return; // historical weeks are read-only
+  clearTimeout(writeTimer);
+  syncDot('pending', 'Unsaved changes…');
+  writeTimer = setTimeout(pushState, 800);
+}
+
+function pushState() {
+  if (!db) return;
+  ignoreNextRemote = true;
+  db.ref(currentWeek).set({
+    atkDB: ATK_DB,
+    enemies: ENEMIES,
+    savedBy: nickname || 'anonymous',
+    savedAt: new Date().toISOString(),
+  }).then(() => {
+    syncDot('live', `Live · saved at ${new Date().toLocaleTimeString()}`);
+  }).catch(e => {
+    ignoreNextRemote = false;
+    syncDot('err', `Save failed: ${e.message}`);
+  });
+}
+
+// ═══════════════════════════════════════
+//  NICKNAME
+// ═══════════════════════════════════════
+function updateNicknameDisplay() {
+  document.getElementById('nicknameDisplay').textContent = nickname ? `(${nickname})` : '';
+}
+function setNickname() {
+  const val = document.getElementById('nicknameInput').value.trim();
+  if (!val) return;
+  nickname = val;
+  localStorage.setItem('wf_nickname', nickname);
+  document.getElementById('nicknameModal').style.display = 'none';
+  updateNicknameDisplay();
+}
+function promptNickname() {
+  document.getElementById('nicknameInput').value = nickname;
+  document.getElementById('nicknameModal').style.display = 'flex';
+  setTimeout(()=>document.getElementById('nicknameInput').focus(), 50);
+}
+document.getElementById('nicknameInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') setNickname();
+});
+
+// ═══════════════════════════════════════
+//  PANEL TOGGLE
+// ═══════════════════════════════════════
+function togglePanel(id) {
+  const p=document.getElementById(id);
+  const h=p.querySelector('.panel-head');
+  const b=p.querySelector('.panel-body');
+  const open=h.classList.toggle('open');
+  b.style.display=open?'':'none';
+}
+
+// ═══════════════════════════════════════
+//  ATTACKER SELECTOR
+// ═══════════════════════════════════════
+const ATK_BPS={jackclown:34595544,xXQuantumXx:50017388,TecoTeco:47772748,ToiletHands:45107092,ripman:44769908,Ribfeast:43450988,BARCHIO:35607869,Jigglypoop:31371796,DEADCLOWNX:30508804,Manjanheta:25330956,Kyosan:22815254,DeezNutz404:23511835};
+(function buildSel(){
+  const sel=document.getElementById('atkSel');
+  for(const [k,bp] of Object.entries(ATK_BPS)){
+    const o=document.createElement('option');
+    o.value=k; o.textContent=`${k} (${(bp/1e6).toFixed(1)}M)`;
+    sel.appendChild(o);
+  }
+})();
+
+function loadAttacker(name){
+  currentAtk=name;
+  document.getElementById('atkTitle').textContent=`${name} – Combat Stats`;
+  buildAtkPanel();
+  buildDronePanel();
+  render();
+}
+
+// ═══════════════════════════════════════
+//  ATTACKER STAT INPUTS
+// ═══════════════════════════════════════
+const ATK_FIELDS=[
+  ['mg_atk','MG Attack'],['wg_atk','WG Attack'],['ms_atk','MS Attack'],['hp','HP'],
+  ['crit','Crit Rate'],['dodge','Dodge Rate'],
+  ['elec_enh','Elec Enhance %'],['burn_enh','Burn Enhance %'],['reflect_enh','Reflect Enhance %'],
+  ['crit_res','Crit Resistance'],
+  ['mg_crit','MG Crit Rate'],['wg_crit','WG Crit Rate'],['ms_crit','MS Crit Rate'],
+  ['mg_crit_res','MG Crit Res'],['wg_crit_res','WG Crit Res'],['ms_crit_res','MS Crit Res'],
+  ['crit_dmg','Crit Dmg %'],['crit_dmg_res','Crit Dmg Res %'],
+  ['mg_crit_dmg','MG Crit Dmg %'],['wg_crit_dmg','WG Crit Dmg %'],['ms_crit_dmg','MS Crit Dmg %'],
+  ['mg_crit_dmg_res','MG Crit Dmg Res %'],['wg_crit_dmg_res','WG Crit Dmg Res %'],['ms_crit_dmg_res','MS Crit Dmg Res %'],
+  ['hit','Hit Rate'],
+  ['elec_dec','Elec Dec %'],['burn_dec','Burn Dec %'],['reflect_dec','Reflect Dec %'],
+  ['pdb','Phys Dmg Break'],['pd','Phys Defense'],['edb','Energy Dmg Break'],['ed','Energy Defense'],
+  ['fid_inc','FDI %'],['fid_dec','FDD %'],
+  ['sentinel_enh','Sentinel Enh %'],['sentinel_dec','Sentinel Dec %'],
+  ['heal_enh','Heal Enhance %'],['heal_dec','Heal Dec %'],
+  ['dmg_inc','Dmg Inc (All) %'],['dmg_red','Dmg Red (All) %'],
+  ['pvp_inc','PvP Inc %'],['pvp_red','PvP Red %'],
+  ['aerial_inc','Aerial Inc %'],['aerial_red','Aerial Red %'],
+  ['mg_dmg_inc','MG Dmg Inc %'],['wg_dmg_inc','WG Dmg Inc %'],['ms_dmg_inc','MS Dmg Inc %'],
+  ['mg_spd','MG Attack Rate %'],['wg_spd','WG Attack Rate %'],['ms_spd','MS Attack Rate %'],
+];
+const ATK_REQUIRED=['elec_enh','burn_enh','reflect_enh','sentinel_enh','heal_enh'];
+
+function buildAtkPanel(){
+  const a=ATK_DB[currentAtk];
+  const fields=ATK_FIELDS.map(([k,lbl])=>{
+    const miss=ATK_REQUIRED.includes(k)&&(a[k]===0||a[k]==null);
+    return `<div class="sf"><label>${lbl}</label>
+      <input class="num${miss?' miss':''}" value="${a[k]??0}" step="0.01"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();nextInput(this);}"
+        oninput="ATK_DB['${currentAtk}']['${k}']=parseFloat(this.value)||0;scheduleWrite();"
+        onchange="render();">
+    </div>`;
+  }).join('');
+  document.getElementById('atkBody').innerHTML=`<div class="stat-grid">${fields}</div>`;
+}
+
+// ═══════════════════════════════════════
+//  DRONE PANEL
+// ═══════════════════════════════════════
+const SLOT_NAMES=['Left-flank','Defender','Right-flank'];
+
+function buildDronePanel(){
+  const a=ATK_DB[currentAtk];
+  const slots=a.drones.map((d,i)=>{
+    const typeOpts=['burn','elec','reflect'].map(t=>`<option value="${t}"${d.type===t?' selected':''}>${t[0].toUpperCase()+t.slice(1)}</option>`).join('');
+    return `<div class="drone-slot">
+      <h3>${SLOT_NAMES[i]}</h3>
+      <div class="ds-row"><label>Name</label><input value="${d.name}" oninput="ATK_DB['${currentAtk}'].drones[${i}].name=this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="ATK_DB['${currentAtk}'].drones[${i}].level=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Type</label><select onchange="ATK_DB['${currentAtk}'].drones[${i}].type=this.value;render();scheduleWrite()">${typeOpts}</select></div>
+      <div class="ds-row"><label>Drone Dmg Boost%</label><input type="number" value="${d.dmgBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].dmgBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Physical Boost%</label><input type="number" value="${d.physBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].physBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Energy Boost%</label><input type="number" value="${d.energyBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].energyBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Normal Atk Boost%</label><input type="number" value="${d.naBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].naBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Skill Boost%</label><input type="number" value="${d.skillBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].skillBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Skill Mult%</label><input type="number" value="${d.skMult||0}" step="1" title="Drone skill multiplier (e.g. 300 for SR max evolve)" oninput="ATK_DB['${currentAtk}'].drones[${i}].skMult=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>ETR%</label><input type="number" value="${d.etr||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].etr=+this.value;scheduleWrite()"></div>
+      <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].tr=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Quick Reload passive — speeds up normal attacks">Quick Reload%</label><input type="number" value="${d.qr||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].qr=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Cooldown Cut passive — speeds up skill attacks">Cooldown Cut%</label><input type="number" value="${d.cc||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].cc=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Spot Weakness passive — NA crit rate (independent of global crit)">Spot Weakness%</label><input type="number" value="${d.sw||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].sw=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Raging Assault passive — adds to base 200% NA crit damage">Raging Assault%</label><input type="number" value="${d.ra||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].ra=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Resistance Boost%</label><input type="number" value="${d.resistBoost||0}" step=".5" oninput="ATK_DB['${currentAtk}'].drones[${i}].resistBoost=+this.value;render();scheduleWrite()"></div>
+    </div>`;
+  }).join('');
+
+  const totalBoost=a.drones.reduce((s,d)=>s+(d.dmgBoost||0),0);
+  document.getElementById('droneBody').innerHTML=
+    `<div class="drone-grid">${slots}</div>
+     <div class="drone-formula">
+       <strong>NA col</strong> = TR × F((IR + DroneNAIR) / 100) &nbsp;|&nbsp; TR = 1 + TR%/100 &nbsp;|&nbsp; DroneNAIR = Σ DmgBoost (<strong>${totalBoost}%</strong>) − Σ EnemyResist + Phys/Energy/NA Boost<br>
+       <strong>SK col</strong> = SkMult% / 100 × F((IR + DroneSKIR) / 100) &nbsp;|&nbsp; DroneSKIR = Σ DmgBoost − Σ EnemyResist + Skill Boost &nbsp;(SK col shows raw IR mult if SkMult not set)<br>
+       <strong>DroneED</strong> = (100 + your Enh + ETR% − enemy Dec) / 100, clamped [1.0, 2.0] &nbsp;|&nbsp; <strong>IR</strong> = pvp_inc + dmg_inc − pvp_red − dmg_red
+     </div>`;
+}
+
+// ═══════════════════════════════════════
+//  ENEMY EXPAND ROW
+// ═══════════════════════════════════════
+const ENEMY_FIELDS=[
+  ['mg_atk','MG Attack'],['wg_atk','WG Attack'],['ms_atk','MS Attack'],['hp','HP'],
+  ['crit','Crit Rate'],['dodge','Dodge Rate'],
+  ['elec_enh','Elec Enhance %'],['burn_enh','Burn Enhance %'],['reflect_enh','Reflect Enhance %'],
+  ['crit_res','Crit Resistance'],
+  ['mg_crit','MG Crit Rate'],['wg_crit','WG Crit Rate'],['ms_crit','MS Crit Rate'],
+  ['mg_crit_res','MG Crit Res'],['wg_crit_res','WG Crit Res'],['ms_crit_res','MS Crit Res'],
+  ['crit_dmg','Crit Dmg %'],['crit_dmg_res','Crit Dmg Res %'],
+  ['mg_crit_dmg','MG Crit Dmg %'],['wg_crit_dmg','WG Crit Dmg %'],['ms_crit_dmg','MS Crit Dmg %'],
+  ['mg_crit_dmg_res','MG Crit Dmg Res %'],['wg_crit_dmg_res','WG Crit Dmg Res %'],['ms_crit_dmg_res','MS Crit Dmg Res %'],
+  ['hit','Hit Rate'],
+  ['elec_dec','Elec Dec %'],['burn_dec','Burn Dec %'],['reflect_dec','Reflect Dec %'],
+  ['pdb','Phys Dmg Break'],['pd','Phys Defense'],['edb','Eng Dmg Break'],['ed','Eng Defense'],
+  ['fid_inc','FDI %'],['fid_dec','FDD %'],
+  ['sentinel_enh','Sentinel Enh %'],['sentinel_dec','Sentinel Dec %'],['heal_enh','Heal Enh %'],['heal_dec','Heal Dec %'],
+  ['dmg_inc','Dmg Inc (All) %'],['dmg_red','Dmg Red (All) %'],
+  ['pvp_inc','PvP Inc %'],['pvp_red','PvP Red %'],
+  ['aerial_inc','Aerial Inc %'],['aerial_red','Aerial Red %'],
+  ['mg_dmg_red','MG Dmg Red %'],['wg_dmg_red','WG Dmg Red %'],['ms_dmg_red','MS Dmg Red %'],
+  ['mg_spd','MG Attack Rate %'],['wg_spd','WG Attack Rate %'],['ms_spd','MS Attack Rate %'],
+];
+
+function buildExpandRow(ei){
+  const e=ENEMIES[ei];
+  const grid=ENEMY_FIELDS.map(([k,lbl])=>`<div class="sf">
+    <label>${lbl}</label>
+    <input class="num" value="${e[k]??''}" placeholder="?" step="0.01"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();nextInput(this);}"
+      oninput="ENEMIES[${ei}]['${k}']=this.value===''?null:parseFloat(this.value)??null;scheduleWrite();"
+      onchange="render();">
+  </div>`).join('');
+
+  const droneSlots=e.drones.map((d,di)=>{
+    const typeOpts=['burn','elec','reflect'].map(t=>`<option value="${t}"${d.type===t?' selected':''}>${t[0].toUpperCase()+t.slice(1)}</option>`).join('');
+    return `<div class="expand-drone-slot">
+      <h4>${SLOT_NAMES[di]}</h4>
+      <div class="ds-row"><label>Name</label><input value="${d.name}" oninput="ENEMIES[${ei}].drones[${di}].name=this.value;scheduleWrite()"></div>
+      <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="ENEMIES[${ei}].drones[${di}].level=+this.value;scheduleWrite()"></div>
+      <div class="ds-row"><label>Type</label><select onchange="ENEMIES[${ei}].drones[${di}].type=this.value;render();scheduleWrite()">${typeOpts}</select></div>
+      <div class="ds-row"><label>Drone Dmg Boost%</label><input type="number" value="${d.dmgBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].dmgBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Physical Boost%</label><input type="number" value="${d.physBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].physBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Energy Boost%</label><input type="number" value="${d.energyBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].energyBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Normal Atk Boost%</label><input type="number" value="${d.naBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].naBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Skill Boost%</label><input type="number" value="${d.skillBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].skillBoost=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Skill Mult%</label><input type="number" value="${d.skMult||0}" step="1" title="Drone skill multiplier (e.g. 300 for SR max evolve)" oninput="ENEMIES[${ei}].drones[${di}].skMult=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>ETR%</label><input type="number" value="${d.etr||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].etr=+this.value;scheduleWrite()"></div>
+      <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].tr=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Quick Reload passive">Quick Reload%</label><input type="number" value="${d.qr||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].qr=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Cooldown Cut passive">Cooldown Cut%</label><input type="number" value="${d.cc||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].cc=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Spot Weakness passive — NA crit rate">Spot Weakness%</label><input type="number" value="${d.sw||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].sw=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label title="Raging Assault passive — adds to 200% base NA crit damage">Raging Assault%</label><input type="number" value="${d.ra||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].ra=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Resistance Boost%</label><input type="number" value="${d.resistBoost||0}" step=".5" oninput="ENEMIES[${ei}].drones[${di}].resistBoost=+this.value;render();scheduleWrite()"></div>
+    </div>`;
+  }).join('');
+
+  const identity=`
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <div class="sf" style="flex:0 0 70px">
+        <label>Grid</label>
+        <input value="${e.label??''}" placeholder="A1" style="text-transform:uppercase"
+          oninput="ENEMIES[${ei}].label=this.value.trim()||null;render();scheduleWrite()">
+      </div>
+      <div class="sf" style="flex:1">
+        <label>Name</label>
+        <input value="${e.name??''}" placeholder="Player name"
+          oninput="ENEMIES[${ei}].name=this.value;render();scheduleWrite()">
+      </div>
+      <div class="sf" style="flex:0 0 100px">
+        <label>BP</label>
+        <input type="number" value="${e.bp??''}" placeholder="0" step="1"
+          oninput="ENEMIES[${ei}].bp=parseFloat(this.value)||0;scheduleWrite();"
+          onchange="render();">
+      </div>
+    </div>`;
+
+  const droneSection=calcMode==='full'?`
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 4px;">Enemy Drone Lineup</div>
+      <div class="expand-drone-grid">${droneSlots}</div>`:'';
+  const colspan=calcMode==='full'?24:15;
+  return `<tr class="expand-row" id="expand-${ei}"><td colspan="${colspan}">
+    <div class="expand-body">
+      ${identity}
+      <div class="expand-grid">${grid}</div>
+      ${droneSection}
+    </div>
+  </td></tr>`;
+}
+
+function toggleExpand(ei){
+  expandedEnemy=(expandedEnemy===ei)?null:ei;
+  render();
+  if(expandedEnemy!==null){
+    setTimeout(()=>{const el=document.getElementById(`expand-${ei}`);if(el)el.scrollIntoView({behavior:'smooth',block:'nearest'});},50);
+  }
+}
+
+// ═══════════════════════════════════════
+//  MAIN RENDER
+// ═══════════════════════════════════════
+function colorH(v){return v>=65?'good':v>=45?'ok':v>=30?'bad':'vbad';}
+function colorM(v,t=[0.9,0.75,0.6]){if(v==null)return '';return v>=t[0]?'good':v>=t[1]?'ok':v>=t[2]?'bad':'vbad';}
+function fmtNull(v,d=3){return v==null?'<span style="color:var(--muted)">—</span>':(+v).toFixed(d);}
+
+function render(){
+  const atk=ATK_DB[currentAtk];
+  const wpType=document.getElementById('wpType').value;
+  const enemyType=document.getElementById('enemyType').value;
+
+  // Update slot header labels with current drone names
+  atk.drones.forEach((d,i)=>{
+    const el=document.getElementById(`slotHdr${i}`);
+    if(el) el.textContent=d.name||SLOT_NAMES[i];
+  });
+
+  // Shared per-slot enh keys
+  const enhKey=d=>d.type==='burn'?'burn_enh':d.type==='elec'?'elec_enh':'reflect_enh';
+  const decKey=d=>d.type==='burn'?'burn_dec':d.type==='elec'?'elec_dec':'reflect_dec';
+  const totalDmgBoost=atk.drones.reduce((s,d)=>s+(d.dmgBoost||0),0);
+
+  const titanMul=document.getElementById('titanGear').checked?1.3:1;
+  // WeaponIR weights: MG≈41%, WG≈29%, MS≈30% (from WpCoeff/cooldown ratios)
+  const WMG=0.41,WWG=0.29,WMS=0.30;
+
+  const rows=ENEMIES.map((e,ei)=>{
+    const hit=hitPct(atk.hit,e.dodge);
+    const cpW=(lc,lr)=>Math.min(80,Math.max(0,atk.crit-(e.crit_res||0)+lc-lr));
+    const cp_mg=cpW(atk.mg_crit||0,e.mg_crit_res||0);
+    const cp_wg=cpW(atk.wg_crit||0,e.wg_crit_res||0);
+    const cp_ms=cpW(atk.ms_crit||0,e.ms_crit_res||0);
+    const cp=Math.round(WMG*cp_mg+WWG*cp_wg+WMS*cp_ms);
+    const cdW=(ld,lr)=>(atk.crit_dmg||200)-(e.crit_dmg_res||0)+ld-lr;
+    const cd_mg=cdW(atk.mg_crit_dmg||0,e.mg_crit_dmg_res||0);
+    const cd_wg=cdW(atk.wg_crit_dmg||0,e.wg_crit_dmg_res||0);
+    const cd_ms=cdW(atk.ms_crit_dmg||0,e.ms_crit_dmg_res||0);
+    const cf=WMG*(1+(cp_mg/100)*(cd_mg/100-1))+WWG*(1+(cp_wg/100)*(cd_wg/100-1))+WMS*(1+(cp_ms/100)*(cd_ms/100-1));
+    const dbd=wpType==='phys'?F((atk.pdb-(e.pd||0))/1000):F((atk.edb-(e.ed||e.edb||0))/1000);
+    // Aerial/ground adjustment goes INSIDE F() per PDF §2.2
+    const areaAdj=enemyType==='aerial'?(atk.aerial_inc||0)-(e.aerial_red||0):
+                  enemyType==='ground'?(atk.ground_inc||0)-(e.ground_red||0):0;
+    // WeaponIR: per-weapon dmg inc/red, weighted by approx damage contribution
+    const wIR=WMG*(atk.mg_dmg_inc||0)+WWG*(atk.wg_dmg_inc||0)+WMS*(atk.ms_dmg_inc||0)
+              -WMG*(e.mg_dmg_red||0)-WWG*(e.wg_dmg_red||0)-WMS*(e.ms_dmg_red||0);
+    const ir=F(((atk.pvp_inc||0)+(atk.dmg_inc||0)+wIR+areaAdj-(e.pvp_red||0)-(e.dmg_red||0))/100);
+    const fm=fidM(atk.fid_inc,e.fid_dec);
+    const sed=(100+(atk.sentinel_enh||0)-(e.sentinel_dec||0))/100;
+    const hed=Math.max(0,(100+(atk.heal_enh||0)-(e.heal_dec||0))/100);
+    const dps=(hit/80)*cf*dbd*ir*fm;
+
+    const enemyResist=e.drones.reduce((s,d)=>s+(d.resistBoost||0),0);
+    const slots=atk.drones.map(d=>{
+      const ek=enhKey(d), dk=decKey(d);
+      const ed=droneED((atk[ek]||0)+(d.etr||0),e[dk]);
+      // Drone IR uses same base IR as weapons but no WeaponIR (weapon-specific)
+      const baseIR=(atk.pvp_inc||0)+(atk.dmg_inc||0)+areaAdj-(e.pvp_red||0)-(e.dmg_red||0);
+      const nairExtra=(wpType==='phys'?(d.physBoost||0):(d.energyBoost||0))+(d.naBoost||0);
+      const naIR=F((baseIR+totalDmgBoost-enemyResist+nairExtra)/100);
+      const skIR=F((baseIR+totalDmgBoost-enemyResist+(d.skillBoost||0))/100);
+      const tr=1+(d.tr||0)/100;
+      const sm=(d.skMult||0)/100;
+      const na=tr*naIR;
+      const sk=sm>0?sm*skIR:skIR;
+      const hasSkMult=sm>0;
+      const naFreq=1+(d.qr||0)/100;
+      const skFreq=hasSkMult?(1+(d.cc||0)/100)/3:0;
+      // NA crit factor: Spot Weakness% crit rate, base 200%+Raging Assault crit dmg (independent of global)
+      const naCritF=1+(d.sw||0)/100*((200+(d.ra||0))/100-1);
+      // per TAA·dbd·fm (drones always hit; skills don't crit)
+      const droneDpsMul=DSMCoeff*(ed??1)*(tr*naIR*naFreq*naCritF+sm*skIR*skFreq);
+      return {ed,na,sk,hasSkMult,droneDpsMul};
+    });
+    const totalDroneDpsMul=calcMode==='full'?slots.reduce((s,sl)=>s+sl.droneDpsMul,0):0;
+
+    // TTK: your kills on them (weapons + drones; titan multiplies your effective TAA)
+    const atkTAA=titanMul*((atk.mg_atk||0)+(atk.wg_atk||0)+(atk.ms_atk||0));
+    const myKillRate=(e.hp&&atkTAA)?(dps+totalDroneDpsMul*dbd*fm)*atkTAA/e.hp:null;
+
+    // TTK: their DPS against you
+    const hasEO=e.hit!=null&&e.crit!=null&&e.pvp_inc!=null;
+    let theirKillRate=null;
+    if(hasEO){
+      const eHit=hitPct(e.hit,atk.dodge);
+      const eCpW=(lc,lr)=>Math.min(80,Math.max(0,(e.crit||0)-(atk.crit_res||0)+lc-lr));
+      const eCp_mg=eCpW(e.mg_crit||0,atk.mg_crit_res||0);
+      const eCp_wg=eCpW(e.wg_crit||0,atk.wg_crit_res||0);
+      const eCp_ms=eCpW(e.ms_crit||0,atk.ms_crit_res||0);
+      const eCp=Math.round(WMG*eCp_mg+WWG*eCp_wg+WMS*eCp_ms);
+      const eCdW=(ld,lr)=>(e.crit_dmg||200)-(atk.crit_dmg_res||0)+ld-lr;
+      const eCd_mg=eCdW(e.mg_crit_dmg||0,atk.mg_crit_dmg_res||0);
+      const eCd_wg=eCdW(e.wg_crit_dmg||0,atk.wg_crit_dmg_res||0);
+      const eCd_ms=eCdW(e.ms_crit_dmg||0,atk.ms_crit_dmg_res||0);
+      const eCf=WMG*(1+(eCp_mg/100)*(eCd_mg/100-1))+WWG*(1+(eCp_wg/100)*(eCd_wg/100-1))+WMS*(1+(eCp_ms/100)*(eCd_ms/100-1));
+      const eDbd=wpType==='phys'?F(((e.pdb||0)-(atk.pd||0))/1000):F(((e.edb||e.pdb||0)-(atk.ed||0))/1000);
+      const eAreaAdj=enemyType==='aerial'?(e.aerial_inc||0)-(atk.aerial_red||0):
+                     enemyType==='ground'?(e.ground_inc||0)-(atk.ground_red||0):0;
+      const eWIR=WMG*(e.mg_dmg_inc||0)+WWG*(e.wg_dmg_inc||0)+WMS*(e.ms_dmg_inc||0)
+                -WMG*(atk.mg_dmg_red||0)-WWG*(atk.wg_dmg_red||0)-WMS*(atk.ms_dmg_red||0);
+      const eIr=F(((e.pvp_inc||0)+(e.dmg_inc||0)+eWIR+eAreaAdj-(atk.pvp_red||0)-(atk.dmg_red||0))/100);
+      const eFm=fidM(e.fid_inc||0,atk.fid_dec||0);
+      const eDps=(eHit/80)*eCf*eDbd*eIr*eFm;
+      const eTAA=(e.mg_atk||0)+(e.wg_atk||0)+(e.ms_atk||0);
+      // Enemy drone DPS against us
+      const eBaseIR=(e.pvp_inc||0)+(e.dmg_inc||0)+eAreaAdj-(atk.pvp_red||0)-(atk.dmg_red||0);
+      const eTotalDmgBoost=e.drones.reduce((s,d)=>s+(d.dmgBoost||0),0);
+      const eAtkResist=atk.drones.reduce((s,d)=>s+(d.resistBoost||0),0);
+      const eTotalDroneDpsMul=e.drones.reduce((s,d)=>{
+        const ek=enhKey(d),dk=decKey(d);
+        const eDED=clamp((100+(e[ek]||0)+(d.etr||0)-(atk[dk]||0))/100,1,2);
+        const nairExtra=(wpType==='phys'?(d.physBoost||0):(d.energyBoost||0))+(d.naBoost||0);
+        const eDroneNaIR=F((eBaseIR+eTotalDmgBoost-eAtkResist+nairExtra)/100);
+        const eDroneSKIR=F((eBaseIR+eTotalDmgBoost-eAtkResist+(d.skillBoost||0))/100);
+        const eTR=1+(d.tr||0)/100;
+        const eSM=(d.skMult||0)/100;
+        const naFreq=1+(d.qr||0)/100;
+        const skFreq=eSM>0?(1+(d.cc||0)/100)/3:0;
+        const naCritF=1+(d.sw||0)/100*((200+(d.ra||0))/100-1);
+        return s+DSMCoeff*eDED*(eTR*eDroneNaIR*naFreq*naCritF+eSM*eDroneSKIR*skFreq);
+      },0);
+      if(atk.hp&&eTAA) theirKillRate=(eDps+(calcMode==='full'?eTotalDroneDpsMul:0)*eDbd*eFm)*eTAA/atk.hp;
+    }
+
+    return {e,ei,hit,cp,cf,dbd,ir,fm,slots,sed,hed,dps,myKillRate,theirKillRate,hasEO};
+  });
+
+  const sortVal=(r,c)=>{
+    if(c==='name')return r.e.name.toLowerCase();
+    if(c==='bp')return r.e.bp||0;
+    if(c==='hit')return r.hit;
+    if(c==='cp')return r.cp;
+    if(c==='cf')return r.cf;
+    if(c==='dbd')return r.dbd;
+    if(c==='ir')return r.ir;
+    if(c==='fm')return r.fm;
+    if(c==='sent')return r.sed;
+    if(c==='heal')return r.hed;
+    if(c==='dps')return r.dps;
+    if(c==='myttk')return r.myKillRate||0;
+    if(c==='theirtk')return r.theirKillRate||0;
+    return 0;
+  };
+  rows.sort((a,b)=>{const av=sortVal(a,sortCol),bv=sortVal(b,sortCol);return sortDir*(av>bv?1:av<bv?-1:0);});
+  const maxDps=Math.max(...rows.map(r=>r.dps));
+  const maxMyKR=Math.max(...rows.map(r=>r.myKillRate||0));
+  const maxTheirKR=Math.max(...rows.map(r=>r.theirKillRate||0));
+
+  let html='';
+  for(const r of rows){
+    const {e,ei,hit,cp,cf,dbd,ir,fm,slots,sed,hed,dps,myKillRate,theirKillRate,hasEO}=r;
+    const bw=Math.round((dps/maxDps)*100);
+    const dc=dps/maxDps>=0.8?'good':dps/maxDps>=0.6?'ok':dps/maxDps>=0.4?'bad':'vbad';
+    const expanded=expandedEnemy===ei;
+    const droneCols=calcMode==='full'?slots.map(s=>`
+      <td style="border-left:1px solid var(--border)" class="${s.ed==null?'':colorM(s.ed,[1.3,1.1,1.0])}">${fmtNull(s.ed)}</td>
+      <td class="${colorM(s.na)}">${s.na.toFixed(3)}</td>
+      <td class="${colorM(s.sk)}" title="${s.hasSkMult?'SK×SkMult':'SK (SkMult not set)'}">${s.sk.toFixed(3)}</td>`).join(''):'';
+
+    // TTK columns
+    const myTTKw=myKillRate&&maxMyKR?Math.round((myKillRate/maxMyKR)*100):0;
+    const myTTKc=myKillRate?(myKillRate/maxMyKR>=0.8?'good':myKillRate/maxMyKR>=0.6?'ok':myKillRate/maxMyKR>=0.4?'bad':'vbad'):'';
+    const theirTTKw=theirKillRate&&maxTheirKR?Math.round((theirKillRate/maxTheirKR)*100):0;
+    // for "their TTK on you": higher kill rate = worse for you → invert color
+    const theirTTKc=theirKillRate?(theirKillRate/maxTheirKR>=0.8?'vbad':theirKillRate/maxTheirKR>=0.6?'bad':theirKillRate/maxTheirKR>=0.4?'ok':'good'):'';
+    const myTTKcell=myKillRate
+      ?`<td class="bar-cell ${myTTKc}"><div class="bar-bg" style="width:${myTTKw}%"></div><span class="bar-val">${(1/myKillRate).toFixed(1)}s</span></td>`
+      :`<td style="color:var(--muted);text-align:center">—</td>`;
+    const theirTTKcell=theirKillRate
+      ?`<td class="bar-cell ${theirTTKc}"><div class="bar-bg" style="width:${theirTTKw}%"></div><span class="bar-val">${(1/theirKillRate).toFixed(1)}s</span></td>`
+      :`<td style="color:var(--muted);text-align:center">${hasEO?'—':'?'}</td>`;
+
+    const muRatio=myKillRate&&theirKillRate?myKillRate/theirKillRate:null;
+    const muClass=muRatio?(muRatio>1.25?'mu-win':muRatio>0.8?'mu-even':'mu-loss'):'';
+    html+=`<tr class="${muClass}">
+      <td class="name-cell" onclick="toggleExpand(${ei})">${expanded?'▼ ':'▶ '}${e.label?`<span style="color:var(--accent);font-size:10px;margin-right:4px">${e.label}</span>`:''}${e.name}</td>
+      <td style="color:var(--muted)">${(e.bp/1e6).toFixed(2)}M</td>
+      <td class="${colorH(hit)}">${hit.toFixed(1)}%</td>
+      <td class="${colorH(cp)}">${cp.toFixed(1)}%</td>
+      <td>${cf.toFixed(3)}</td>
+      <td class="${colorM(dbd,[1.0,0.95,0.9])}">${dbd.toFixed(3)}</td>
+      <td class="${colorM(ir)}">${ir.toFixed(3)}</td>
+      <td class="${colorM(fm)}" title="FID=${(100+(atk.fid_inc||0)-(e.fid_dec||0)).toFixed(1)}">${fm.toFixed(3)}</td>
+      ${droneCols}
+      <td class="${colorM(sed)}">${sed.toFixed(3)}</td>
+      <td class="${colorM(hed)}">${hed.toFixed(3)}</td>
+      <td class="bar-cell ${dc}">
+        <div class="bar-bg" style="width:${bw}%"></div>
+        <span class="bar-val">${(dps*100).toFixed(1)}</span>
+      </td>
+      ${myTTKcell}
+      ${theirTTKcell}
+      <td style="text-align:center"><button class="btn" onclick="runSim(${ei})" title="Monte Carlo simulation">▶</button></td>
+    </tr>`;
+    if(expanded) html+=buildExpandRow(ei);
+  }
+  document.getElementById('tableBody').innerHTML=html;
+
+  for(const c of ['name','bp','hit','cp','cf','dbd','ir','fm','sent','heal','dps','myttk','theirtk']){
+    const el=document.getElementById('th-'+c);
+    if(!el)continue;
+    el.classList.remove('sort-asc','sort-desc');
+    if(c===sortCol)el.classList.add(sortDir>0?'sort-asc':'sort-desc');
+  }
+}
+
+// ═══════════════════════════════════════
+//  MONTE CARLO SIMULATOR
+// ═══════════════════════════════════════
+const SIM_N=1000, SIM_LIMIT=300; // safety only — WF has no time limit, battles end at 0 HP
+const WP_BASE_CD={mg:0.96,wg:1.6,ms:4.0};
+const WP_COEFF_VAL={mg:0.07575,wg:0.09,ms:0.225};
+
+function buildSimData(shooter,target,cfg){
+  const {wpType,enemyType,shooterTitan,titanMul}=cfg;
+  const tM=shooterTitan?titanMul:1;
+  const dbd=wpType==='phys'?F(((shooter.pdb||0)-(target.pd||0))/1000):F(((shooter.edb||0)-(target.ed||target.edb||0))/1000);
+  const areaAdj=enemyType==='aerial'?(shooter.aerial_inc||0)-(target.aerial_red||0):enemyType==='ground'?(shooter.ground_inc||0)-(target.ground_red||0):0;
+  const fm=fidM(shooter.fid_inc,target.fid_dec);
+  const baseIR=(shooter.pvp_inc||0)+(shooter.dmg_inc||0)+areaAdj-(target.pvp_red||0)-(target.dmg_red||0);
+  const taa=tM*((shooter.mg_atk||0)+(shooter.wg_atk||0)+(shooter.ms_atk||0));
+  const hitP=Math.min(80,Math.max(20,100+(shooter.hit||0)-(target.dodge||0)));
+
+  const weapons={};
+  for(const w of ['mg','wg','ms']){
+    const wAtk=tM*(shooter[w+'_atk']||0);
+    const wIR=(shooter[w+'_dmg_inc']||0)-(target[w+'_dmg_red']||0);
+    const ir=F((baseIR+wIR)/100);
+    const gC=(shooter.crit||0)-(target.crit_res||0);
+    const lC=(shooter[w+'_crit']||0)-(target[w+'_crit_res']||0);
+    const critP=Math.min(80,Math.max(0,gC+lC));
+    const base=WP_COEFF_VAL[w]*wAtk*dbd*ir*fm;
+    const cd=WP_BASE_CD[w]/(1+(shooter[w+'_spd']||0)/100);
+    const critDmgPct=(shooter.crit_dmg||200)-(target.crit_dmg_res||0)+(shooter[w+'_crit_dmg']||0)-(target[w+'_crit_dmg_res']||0);
+    weapons[w]={hitP,critP,base,crit:base*critDmgPct/100,cd};
+  }
+
+  const enhKey=d=>d.type==='burn'?'burn_enh':d.type==='elec'?'elec_enh':'reflect_enh';
+  const decKey=d=>d.type==='burn'?'burn_dec':d.type==='elec'?'elec_dec':'reflect_dec';
+  const totalBoost=shooter.drones.reduce((s,d)=>s+(d.dmgBoost||0),0);
+  const eResist=target.drones.reduce((s,d)=>s+(d.resistBoost||0),0);
+
+  const drones=shooter.drones.map(d=>{
+    const ek=enhKey(d),dk=decKey(d);
+    const ed=clamp((100+(shooter[ek]||0)+(d.etr||0)-(target[dk]||0))/100,1,2);
+    const nairX=(wpType==='phys'?(d.physBoost||0):(d.energyBoost||0))+(d.naBoost||0);
+    const naIR=F((baseIR+totalBoost-eResist+nairX)/100);
+    const skIR=F((baseIR+totalBoost-eResist+(d.skillBoost||0))/100);
+    const tr=1+(d.tr||0)/100;
+    const sm=(d.skMult||0)/100;
+    const isBurn=d.type==='burn';
+    const naBase=tr*ed*DSMCoeff*taa*dbd*naIR*fm;
+    const naCritF=(200+(d.ra||0))/100;
+    const naCritP=Math.min(80,d.sw||0);
+    const skDmg=(!isBurn&&sm>0)?sm*ed*DSMCoeff*taa*dbd*skIR*fm:0;
+    const burnContrib=isBurn?0.7*ed*DSMCoeff*taa*dbd*skIR*fm:0;
+    return {naBase,naCritF,naCritP,naHitP:hitP,skDmg,burnContrib,isBurn,
+            naCd:1/(1+(d.qr||0)/100),skCd:3/(1+(d.cc||0)/100)};
+  });
+
+  return {weapons,drones};
+}
+
+function simOnce(aD,dD,aHP0,dHP0,aBP,dBP){
+  let aHP=aHP0,dHP=dHP0,aBurn=[],dBurn=[],aBurnOn=false,dBurnOn=false;
+  const eq=[];
+  const push=ev=>{
+    let lo=0,hi=eq.length;
+    while(lo<hi){const m=(lo+hi)>>1;eq[m].t<=ev.t?lo=m+1:hi=m;}
+    eq.splice(lo,0,ev);
+  };
+  const af=aBP>=dBP,eps=0.0001;
+  let t=0;
+  for(const w of ['mg','wg','ms']){
+    push({t:t+(af?0:eps),tp:'wp',w,o:'a'});
+    push({t:t+(af?eps:0),tp:'wp',w,o:'d'});
+    t+=2*eps;
+  }
+  for(let sl=0;sl<3;sl++){
+    push({t:t+(af?0:eps),tp:'sk',sl,o:'a'});
+    push({t:t+(af?eps:0),tp:'sk',sl,o:'d'});
+    t+=2*eps;
+    push({t:t+(af?0:eps),tp:'na',sl,o:'a'});
+    push({t:t+(af?eps:0),tp:'na',sl,o:'d'});
+    t+=2*eps;
+  }
+  let ct=0;
+  while(eq.length){
+    const ev=eq.shift();ct=ev.t;
+    if(ct>SIM_LIMIT||aHP<=0||dHP<=0)break;
+    const isA=ev.o==='a';
+    const D=isA?aD:dD;
+    if(ev.tp==='wp'){
+      const wd=D.weapons[ev.w];
+      if(Math.random()*100<wd.hitP){
+        const dmg=Math.random()*100<wd.critP?wd.crit:wd.base;
+        isA?dHP-=dmg:aHP-=dmg;
+      }
+      if(aHP<=0||dHP<=0)break;
+      push({...ev,t:ev.t+wd.cd});
+    }else if(ev.tp==='na'){
+      const dd=D.drones[ev.sl];
+      if(Math.random()*100<dd.naHitP){
+        const dmg=Math.random()*100<dd.naCritP?dd.naBase*dd.naCritF:dd.naBase;
+        isA?dHP-=dmg:aHP-=dmg;
+      }
+      if(aHP<=0||dHP<=0)break;
+      push({...ev,t:ev.t+dd.naCd});
+    }else if(ev.tp==='sk'){
+      const dd=D.drones[ev.sl];
+      if(dd.isBurn){
+        const bArr=isA?aBurn:dBurn;
+        bArr.push(dd.burnContrib);
+        if(bArr.length>6)bArr.shift();
+        if(isA&&!aBurnOn){push({t:ev.t+1,tp:'bt',o:'a'});aBurnOn=true;}
+        else if(!isA&&!dBurnOn){push({t:ev.t+1,tp:'bt',o:'d'});dBurnOn=true;}
+      }else if(dd.skDmg>0){
+        isA?dHP-=dd.skDmg:aHP-=dd.skDmg;
+        if(aHP<=0||dHP<=0)break;
+      }
+      push({...ev,t:ev.t+dd.skCd});
+    }else if(ev.tp==='bt'){
+      const bArr=isA?aBurn:dBurn;
+      if(bArr.length>0){
+        const dmg=bArr.reduce((s,b)=>s+b,0);
+        isA?dHP-=dmg:aHP-=dmg;
+        if(aHP<=0||dHP<=0)break;
+        push({...ev,t:ev.t+1});
+      }else{isA?aBurnOn=false:dBurnOn=false;}
+    }
+  }
+  if(aHP<=0&&dHP<=0)return{w:'draw',t:ct};
+  if(aHP<=0)return{w:'def',t:ct};
+  if(dHP<=0)return{w:'atk',t:ct};
+  return{w:aHP/aHP0>dHP/dHP0?'atk':'def',t:SIM_LIMIT,tl:true};
+}
+
+function runSim(ei){
+  const e=ENEMIES[ei],atk=ATK_DB[currentAtk];
+  if(!atk.hp||!e.hp)return alert('Enter HP for both attacker and enemy first.');
+  const wpType=document.getElementById('wpType').value;
+  const enemyType=document.getElementById('enemyType').value;
+  const titanMul=document.getElementById('titanGear').checked?1.3:1;
+  const cfg={wpType,enemyType,titanMul};
+  const aD=buildSimData(atk,e,{...cfg,shooterTitan:true});
+  const dD=buildSimData(e,atk,{...cfg,shooterTitan:false});
+  let aW=0,dW=0,draws=0,tlN=0;
+  const aT=[],dT=[];
+  for(let i=0;i<SIM_N;i++){
+    const r=simOnce(aD,dD,atk.hp,e.hp,atk.bp||0,e.bp||0);
+    if(r.w==='atk'){aW++;aT.push(r.t);if(r.tl)tlN++;}
+    else if(r.w==='def'){dW++;dT.push(r.t);if(r.tl)tlN++;}
+    else draws++;
+  }
+  const avg=a=>a.length?(a.reduce((s,v)=>s+v,0)/a.length):null;
+  showSimModal(atk,e,{aW,dW,draws,tlN,aAvg:avg(aT),dAvg:avg(dT)});
+}
+
+function showSimModal(atk,e,r){
+  let m=document.getElementById('simModal');
+  if(!m){
+    m=document.createElement('div');
+    m.id='simModal';
+    m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:1000';
+    m.addEventListener('click',ev=>{if(ev.target===m)m.style.display='none';});
+    document.body.appendChild(m);
+  }
+  const aP=(r.aW/SIM_N*100).toFixed(1),dP=(r.dW/SIM_N*100).toFixed(1),drP=(r.draws/SIM_N*100).toFixed(1);
+  const fmt=v=>v==null?'—':v.toFixed(2)+'s';
+  const eName=e.label?(e.label+' '+e.name):e.name;
+  m.innerHTML=`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px;min-width:340px;max-width:500px;width:90vw">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <strong style="color:var(--accent);font-size:13px">${currentAtk} vs ${eName}</strong>
+      <button class="btn" onclick="document.getElementById('simModal').style.display='none'">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px">n=${SIM_N} runs</div>
+    <div style="height:32px;display:flex;border-radius:4px;overflow:hidden;margin-bottom:8px">
+      <div style="background:var(--green);width:${aP}%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;min-width:2px">${+aP>10?aP+'%':''}</div>
+      ${r.draws>0?`<div style="background:var(--muted);width:${drP}%;min-width:2px"></div>`:''}
+      <div style="background:var(--red);flex:1;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff">${+dP>10?dP+'%':''}</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:16px">
+      <span style="color:var(--green)">▲ ${currentAtk} <strong>${aP}%</strong></span>
+      ${r.draws>0?`<span style="color:var(--muted)">Draw ${drP}%</span>`:''}
+      <span style="color:var(--red)">▼ ${eName} <strong>${dP}%</strong></span>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <tr style="color:var(--muted);font-size:11px"><td></td><td style="text-align:right;padding:2px 8px">Win%</td><td style="text-align:right;padding:2px 8px">Avg kill time</td></tr>
+      <tr><td style="padding:4px 0;color:var(--green)">${currentAtk}</td><td style="text-align:right;padding:4px 8px"><strong>${aP}%</strong></td><td style="text-align:right;padding:4px 8px">${fmt(r.aAvg)}</td></tr>
+      <tr><td style="padding:4px 0;color:var(--red)">${eName}</td><td style="text-align:right;padding:4px 8px"><strong>${dP}%</strong></td><td style="text-align:right;padding:4px 8px">${fmt(r.dAvg)}</td></tr>
+    </table>
+    <div style="font-size:10px;color:var(--muted);margin-top:14px;line-height:1.6;border-top:1px solid var(--border);padding-top:10px">
+      v1 includes: weapons (hit/crit/cooldown), drone NA+skills, burn ticks.<br>
+      Excludes: sentinels, mechs, fighter/armor, Flaming stacks, SpSKMod.
+    </div>
+  </div>`;
+  m.style.display='flex';
+}
+
+// ── Select-on-focus + Escape-to-revert (Excel-style) ──
+document.addEventListener('focusin', e => {
+  const t = e.target;
+  if (t.tagName === 'INPUT' && t.type !== 'checkbox') {
+    t.select();
+    t._escVal = t.value;
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const t = e.target;
+    if (t.tagName === 'INPUT' && t.type !== 'checkbox' && t._escVal !== undefined) {
+      t.value = t._escVal;
+      t.dispatchEvent(new Event('input'));
+      t.blur();
+      e.preventDefault();
+    }
+  }
+});
+
+// ── Init ──
+if (!nickname) promptNickname();
+updateNicknameDisplay();
+buildWeekSelector();
+updateHeader();
+// Apply default simple mode
+document.getElementById('dronePanel').style.display = 'none';
+document.getElementById('mainTable').classList.add('no-drone');
+loadAttacker('jackclown');
+initFirebase();
+</script>
+</body>
+</html>
