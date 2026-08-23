@@ -656,12 +656,43 @@ function droneStatsAt(grade,level,stars){
   return {hp:Math.round(t.hp[i]*mult),atk:Math.round(t.atk[i]*mult)};
 }
 
+// All 23 drone passive families. range = Green L1 -> Orange L7 span (Blue/Purple sit between).
+// note flags type-exclusivity or "no effect in PvP" (pierce/ricochet/slow/PvE-only skills).
+const DRONE_PASSIVES=[
+  {name:'Skill Boost',range:'2–35%',note:'Electric only'},
+  {name:'Reflect Boost',range:'2–35%',note:'Reflect only'},
+  {name:'Burning Boost',range:'2–35%',note:'Burning only'},
+  {name:'Cooldown Cut',range:'2–35%'},
+  {name:'Drone Damage Boost',range:'2–20%'},
+  {name:'Resistance Boost',range:'2–20%'},
+  {name:'Cheating Death',range:'3–35% chance, 30% recover'},
+  {name:'Overload Strike',range:'1.5–24.5%',note:'PvE only — no effect in PvP'},
+  {name:'Normal Attack Boost',range:'2.5–42%'},
+  {name:'Physical Boost',range:'3–49%'},
+  {name:'Energy Boost',range:'3–49%'},
+  {name:'Precision Strike',range:'2.5–42%'},
+  {name:'Spot Weakness',range:'1.5–24.5%'},
+  {name:'Raging Assault',range:'3–50%'},
+  {name:'Quick Reload',range:'2.5–42%'},
+  {name:'Giant Bullet',range:'3–50%',note:'no effect in PvP'},
+  {name:'Trajectory Refined',range:'2.5–42%'},
+  {name:'Experimental Trajectory Refined',range:'3–49%, first 5s'},
+  {name:'Experimental Quick Reload',range:'3–49%, after 5s'},
+  {name:'Explosive Shell',range:'106–205%',note:'no effect in PvP'},
+  {name:'Armor Piercer',range:'106–205%, pierce 2',note:'no effect in PvP'},
+  {name:'Tracking Bomb',range:'106–205%, ricochet 3',note:'no effect in PvP'},
+  {name:'Jamming Shot',range:'1–20%',note:'no effect in PvP'},
+];
+
 function passiveRowsHtml(d, pathPrefix){
   if(!d.passives) d.passives=[];
+  const passiveOpts=`<option value="">— select passive —</option>`+DRONE_PASSIVES.map(p=>
+    `<option value="${p.name}">${p.name} (${p.range}${p.note?' — '+p.note:''})</option>`).join('');
   const rows=d.passives.map((p,pi)=>`
     <div class="ds-row" style="gap:4px">
-      <input placeholder="Passive name" value="${p.name||''}" style="flex:2"
-        oninput="${pathPrefix}.passives[${pi}].name=this.value;scheduleWrite()">
+      <select style="flex:2" onchange="${pathPrefix}.passives[${pi}].name=this.value;scheduleWrite()">
+        ${passiveOpts.replace(`value="${p.name}"`,`value="${p.name}" selected`)}
+      </select>
       <input type="number" placeholder="Val%" value="${p.value||0}" step=".5" style="flex:1;min-width:50px"
         oninput="${pathPrefix}.passives[${pi}].value=+this.value;render();scheduleWrite()">
       <button class="btn" style="padding:2px 6px" onclick="${pathPrefix}.passives.splice(${pi},1);render();scheduleWrite()">✕</button>
