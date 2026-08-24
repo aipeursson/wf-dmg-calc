@@ -641,10 +641,12 @@ function droneNameOptions(currentName){
   let html=`<option value="">— unknown —</option>`;
   const found=DRONE_ROSTER.some(dr=>dr.name===currentName);
   if(currentName&&!found) html+=`<option value="${currentName}" selected>${currentName} (custom)</option>`;
-  for(const g of ['SR','R','N']){
-    html+=`<optgroup label="${g}">`;
-    html+=DRONE_ROSTER.filter(dr=>dr.grade===g).map(dr=>
-      `<option value="${dr.name}"${dr.name===currentName?' selected':''}>${dr.name} (${DRONE_TYPE_LABEL[dr.type]})</option>`).join('');
+  for(const t of ['burn','reflect','elec']){
+    html+=`<optgroup label="${DRONE_TYPE_LABEL[t]}">`;
+    for(const g of ['SR','R','N']){
+      html+=DRONE_ROSTER.filter(dr=>dr.type===t&&dr.grade===g).map(dr=>
+        `<option value="${dr.name}"${dr.name===currentName?' selected':''}>${dr.name} (${g})</option>`).join('');
+    }
     html+=`</optgroup>`;
   }
   return html;
