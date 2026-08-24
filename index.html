@@ -726,7 +726,8 @@ function buildDronePanel(){
       <div class="ds-row"><label>Normal Atk Boost%</label><input type="number" value="${d.naBoost||0}" step=".5" oninput="${path}.naBoost=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>Skill Boost%</label><input type="number" value="${d.skillBoost||0}" step=".5" oninput="${path}.skillBoost=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>Skill Mult%</label><input type="number" value="${d.skMult||0}" step="1" title="Drone skill multiplier (e.g. 300 for SR max evolve)" oninput="${path}.skMult=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>ETR%</label><input type="number" value="${d.etr||0}" step=".5" oninput="${path}.etr=+this.value;scheduleWrite()"></div>
+      <div class="ds-row"><label title="Experimental Trajectory Refined — adds extra NA trajectory only in the first 5s of battle. Not folded into the steady-state DPS/TTK index below; recorded for reference only.">ETR% (opening 5s only)</label><input type="number" value="${d.etr||0}" step=".5" oninput="${path}.etr=+this.value;scheduleWrite()"></div>
+      <div class="ds-row"><label title="Precision Strike passive — adds to this drone's own hit rate for its normal attack only (skills always hit regardless)">Precision Strike%</label><input type="number" value="${d.precisionStrike||0}" step=".5" oninput="${path}.precisionStrike=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="${path}.tr=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label title="Quick Reload passive — speeds up normal attacks">Quick Reload%</label><input type="number" value="${d.qr||0}" step=".5" oninput="${path}.qr=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label title="Cooldown Cut passive — speeds up skill attacks">Cooldown Cut%</label><input type="number" value="${d.cc||0}" step=".5" oninput="${path}.cc=+this.value;render();scheduleWrite()"></div>
@@ -743,7 +744,8 @@ function buildDronePanel(){
      <div class="drone-formula">
        <strong>NA col</strong> = TR × F((IR + DroneNAIR) / 100) &nbsp;|&nbsp; TR = 1 + TR%/100 &nbsp;|&nbsp; DroneNAIR = Σ DmgBoost (<strong>${totalBoost}%</strong>) − Σ EnemyResist + Phys/Energy/NA Boost<br>
        <strong>SK col</strong> = SkMult% / 100 × F((IR + DroneSKIR) / 100) &nbsp;|&nbsp; DroneSKIR = Σ DmgBoost − Σ EnemyResist + Skill Boost &nbsp;(SK col shows raw IR mult if SkMult not set)<br>
-       <strong>DroneED</strong> = (100 + your Enh + ETR% − enemy Dec) / 100, clamped [1.0, 2.0] &nbsp;|&nbsp; <strong>IR</strong> = pvp_inc + dmg_inc − pvp_red − dmg_red
+       <strong>DroneED</strong> = (100 + your Enh − enemy Dec) / 100, clamped [1.0, 2.0] &nbsp;|&nbsp; <strong>IR</strong> = pvp_inc + dmg_inc − pvp_red − dmg_red<br>
+       <strong>NA hit%</strong> = min(80,max(20,100+Hit+PrecisionStrike%−enemy Dodge)) / 80 &nbsp;— NA rolls hit/dodge like gear; skills always hit
      </div>`;
 }
 
@@ -801,7 +803,8 @@ function buildExpandRow(ei){
       <div class="ds-row"><label>Normal Atk Boost%</label><input type="number" value="${d.naBoost||0}" step=".5" oninput="${path}.naBoost=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>Skill Boost%</label><input type="number" value="${d.skillBoost||0}" step=".5" oninput="${path}.skillBoost=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>Skill Mult%</label><input type="number" value="${d.skMult||0}" step="1" title="Drone skill multiplier (e.g. 300 for SR max evolve)" oninput="${path}.skMult=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>ETR%</label><input type="number" value="${d.etr||0}" step=".5" oninput="${path}.etr=+this.value;scheduleWrite()"></div>
+      <div class="ds-row"><label title="Experimental Trajectory Refined — adds extra NA trajectory only in the first 5s of battle. Not folded into the steady-state DPS/TTK index below; recorded for reference only.">ETR% (opening 5s only)</label><input type="number" value="${d.etr||0}" step=".5" oninput="${path}.etr=+this.value;scheduleWrite()"></div>
+      <div class="ds-row"><label title="Precision Strike passive — adds to this drone's own hit rate for its normal attack only (skills always hit regardless)">Precision Strike%</label><input type="number" value="${d.precisionStrike||0}" step=".5" oninput="${path}.precisionStrike=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="${path}.tr=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label title="Quick Reload passive">Quick Reload%</label><input type="number" value="${d.qr||0}" step=".5" oninput="${path}.qr=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label title="Cooldown Cut passive">Cooldown Cut%</label><input type="number" value="${d.cc||0}" step=".5" oninput="${path}.cc=+this.value;render();scheduleWrite()"></div>
@@ -908,7 +911,7 @@ function render(){
     const enemyResist=e.drones.reduce((s,d)=>s+(d.resistBoost||0),0);
     const slots=atk.drones.map(d=>{
       const ek=enhKey(d), dk=decKey(d);
-      const ed=droneED((atk[ek]||0)+(d.etr||0),e[dk]);
+      const ed=droneED((atk[ek]||0),e[dk]);
       // Drone IR uses same base IR as weapons but no WeaponIR (weapon-specific)
       const baseIR=(atk.pvp_inc||0)+(atk.dmg_inc||0)+areaAdj-(e.pvp_red||0)-(e.dmg_red||0);
       const nairExtra=(wpType==='phys'?(d.physBoost||0):(d.energyBoost||0))+(d.naBoost||0);
@@ -923,8 +926,10 @@ function render(){
       const skFreq=hasSkMult?(1+(d.cc||0)/100)/3:0;
       // NA crit factor: Spot Weakness% crit rate, base 200%+Raging Assault crit dmg (independent of global)
       const naCritF=1+(d.sw||0)/100*((200+(d.ra||0))/100-1);
-      // per TAA·dbd·fm (drones always hit; skills don't crit)
-      const droneDpsMul=DSMCoeff*(ed??1)*(tr*naIR*naFreq*naCritF+sm*skIR*skFreq);
+      // Precision Strike adds to this drone's own hit rate — NA is subject to hit/dodge like gear; skills always hit.
+      const naHit=hitPct(atk.hit+(d.precisionStrike||0), e.dodge)/80;
+      // per TAA·dbd·fm (skills always hit and never crit; NA rolls hit like gear)
+      const droneDpsMul=DSMCoeff*(ed??1)*(tr*naIR*naFreq*naCritF*naHit+sm*skIR*skFreq);
       return {ed,na,sk,hasSkMult,droneDpsMul};
     });
     const totalDroneDpsMul=calcMode==='full'?slots.reduce((s,sl)=>s+sl.droneDpsMul,0):0;
