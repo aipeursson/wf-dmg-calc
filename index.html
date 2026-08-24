@@ -761,17 +761,17 @@ function passiveSum(d,field){
 }
 
 const PASSIVE_SLOT_COUNT=5;
-function passiveRowsHtml(d, pathPrefix){
+function passiveRowsHtml(d, pathPrefix, rebuildFn){
   if(!d.passives) d.passives=[];
   while(d.passives.length<PASSIVE_SLOT_COUNT) d.passives.push({name:'',rarity:0,value:0,level:1});
   const passiveOpts=`<option value="">— select passive —</option>`+DRONE_PASSIVES.map(p=>
-    `<option value="${p.name}">${p.name} (G ${p.g1}–${p.g7}% / O ${p.o1}–${p.o7}%${p.extra?', '+p.extra:''}${p.note?' — '+p.note:''})</option>`).join('');
+    `<option value="${p.name}">${p.name}${p.note?' ('+p.note+')':''}</option>`).join('');
   const rarityOpts=PASSIVE_RARITIES.map((r,ri)=>`<option value="${ri}">${r}</option>`).join('');
   const levelOpts=[1,2,3,4,5,6,7].map(l=>`<option value="${l}">L${l}</option>`).join('');
   const rows=d.passives.map((p,pi)=>{
     if(p.level==null) p.level=1;
     if(p.rarity==null) p.rarity=0;
-    const recalc=`${pathPrefix}.passives[${pi}].value=passiveValueAt(${pathPrefix}.passives[${pi}].name,${pathPrefix}.passives[${pi}].rarity,${pathPrefix}.passives[${pi}].level);render();scheduleWrite()`;
+    const recalc=`${pathPrefix}.passives[${pi}].value=passiveValueAt(${pathPrefix}.passives[${pi}].name,${pathPrefix}.passives[${pi}].rarity,${pathPrefix}.passives[${pi}].level);${rebuildFn||''}render();scheduleWrite()`;
     return `
     <div class="ds-row" style="gap:4px">
       <select style="flex:0 0 62px" title="Passive rarity — Blue/Purple are interpolated between the documented Green and Orange values"
@@ -786,7 +786,7 @@ function passiveRowsHtml(d, pathPrefix){
         ${levelOpts.replace(`value="${p.level}"`,`value="${p.level}" selected`)}
       </select>
       <span style="flex:0 0 46px;font-size:11px;color:var(--muted);align-self:center;text-align:right">${p.value??0}%</span>
-      <button class="btn" style="padding:2px 6px" title="Clear this slot" onclick="${pathPrefix}.passives[${pi}]={name:'',rarity:0,value:0,level:1};render();scheduleWrite()">✕</button>
+      <button class="btn" style="padding:2px 6px" title="Clear this slot" onclick="${pathPrefix}.passives[${pi}]={name:'',rarity:0,value:0,level:1};${rebuildFn||''}render();scheduleWrite()">✕</button>
     </div>`;
   }).join('');
   return `<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
@@ -804,7 +804,7 @@ function buildDronePanel(){
       <div class="ds-row"><label>Drone</label><select onchange="const _r=DRONE_ROSTER.find(x=>x.name===this.value);${path}.name=this.value;if(_r){${path}.grade=_r.grade;${path}.type=_r.type;${path}.skMult=SKMULT_DEFAULT_BY_GRADE[_r.grade]||0;}buildDronePanel();render();scheduleWrite()">${droneNameOptions(d.name)}</select></div>
       ${starPickerHtml(d,path,'buildDronePanel();')}
       <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="${path}.level=+this.value;render();scheduleWrite()"></div>
-      ${passiveRowsHtml(d,path)}
+      ${passiveRowsHtml(d,path,'buildDronePanel();')}
     </div>`;
   }).join('');
 
@@ -862,7 +862,7 @@ function buildExpandRow(ei){
       <div class="ds-row"><label>Drone</label><select onchange="const _r=DRONE_ROSTER.find(x=>x.name===this.value);${path}.name=this.value;if(_r){${path}.grade=_r.grade;${path}.type=_r.type;${path}.skMult=SKMULT_DEFAULT_BY_GRADE[_r.grade]||0;}render();scheduleWrite()">${droneNameOptions(d.name)}</select></div>
       ${starPickerHtml(d,path,'')}
       <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="${path}.level=+this.value;render();scheduleWrite()"></div>
-      ${passiveRowsHtml(d,path)}
+      ${passiveRowsHtml(d,path,'')}
     </div>`;
   }).join('');
 
