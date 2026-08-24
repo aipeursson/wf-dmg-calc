@@ -635,6 +635,33 @@ function buildAtkPanel(){
 // ═══════════════════════════════════════
 const SLOT_NAMES=['Left-flank','Defender','Right-flank'];
 const DRONE_GRADES={'':'—',N:'N (120–180% skill)',R:'R (170–255% skill)',SR:'SR (200–300% skill)'};
+const DRONE_TYPE_LABEL={elec:'Electric',reflect:'Reflect',burn:'Burning'};
+
+// Full 27-drone roster. type uses the same keys as the rest of the app (burn/elec/reflect).
+const DRONE_ROSTER=[
+  {name:'Draco',grade:'SR',type:'elec'},{name:'Orion',grade:'SR',type:'elec'},{name:'Aquila',grade:'SR',type:'elec'},
+  {name:'Pavo',grade:'SR',type:'reflect'},{name:'Apus',grade:'SR',type:'reflect'},{name:'Grus',grade:'SR',type:'reflect'},
+  {name:'Sagittarius',grade:'SR',type:'burn'},{name:'Lyra',grade:'SR',type:'burn'},{name:'Fornax',grade:'SR',type:'burn'},
+  {name:'Cyclops',grade:'R',type:'elec'},{name:'Hydra',grade:'R',type:'elec'},{name:'Harpy',grade:'R',type:'elec'},
+  {name:'Naga',grade:'R',type:'reflect'},{name:'Unicorn',grade:'R',type:'reflect'},{name:'Medusa',grade:'R',type:'reflect'},
+  {name:'Lich',grade:'R',type:'burn'},{name:'Cerberus',grade:'R',type:'burn'},{name:'Scorpion lion',grade:'R',type:'burn'},
+  {name:'Hunter',grade:'N',type:'elec'},{name:'Courier',grade:'N',type:'elec'},{name:'Scout',grade:'N',type:'elec'},
+  {name:'Sentry',grade:'N',type:'reflect'},{name:'Guard',grade:'N',type:'reflect'},{name:'Knight',grade:'N',type:'reflect'},
+  {name:'Gladiator',grade:'N',type:'burn'},{name:'Ranger',grade:'N',type:'burn'},{name:'Ninja',grade:'N',type:'burn'},
+];
+
+function droneNameOptions(currentName){
+  let html=`<option value="">— unknown —</option>`;
+  const found=DRONE_ROSTER.some(dr=>dr.name===currentName);
+  if(currentName&&!found) html+=`<option value="${currentName}" selected>${currentName} (custom)</option>`;
+  for(const g of ['SR','R','N']){
+    html+=`<optgroup label="${g}">`;
+    html+=DRONE_ROSTER.filter(dr=>dr.grade===g).map(dr=>
+      `<option value="${dr.name}"${dr.name===currentName?' selected':''}>${dr.name} (${DRONE_TYPE_LABEL[dr.type]})</option>`).join('');
+    html+=`</optgroup>`;
+  }
+  return html;
+}
 
 // Official per-level HP/ATK progression tables (levels 1-200), by grade.
 const DRONE_LEVEL_TABLE={
@@ -714,7 +741,7 @@ function buildDronePanel(){
     const dstat=d.grade?droneStatsAt(d.grade,d.level||1,d.stars||0):null;
     return `<div class="drone-slot">
       <h3>${SLOT_NAMES[i]}</h3>
-      <div class="ds-row"><label>Name</label><input value="${d.name}" oninput="${path}.name=this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Drone</label><select onchange="const _r=DRONE_ROSTER.find(x=>x.name===this.value);${path}.name=this.value;if(_r){${path}.grade=_r.grade;${path}.type=_r.type;}buildDronePanel();render();scheduleWrite()">${droneNameOptions(d.name)}</select></div>
       <div class="ds-row"><label>Type</label><select onchange="${path}.type=this.value;render();scheduleWrite()">${typeOpts}</select></div>
       <div class="ds-row"><label>Grade</label><select onchange="${path}.grade=this.value;render();scheduleWrite()">${gradeOpts}</select></div>
       <div class="ds-row"><label>Stars (0–35)</label><input type="number" value="${d.stars||0}" min="0" max="35" oninput="${path}.stars=+this.value;render();scheduleWrite()"></div>
@@ -791,7 +818,7 @@ function buildExpandRow(ei){
     const dstat=d.grade?droneStatsAt(d.grade,d.level||1,d.stars||0):null;
     return `<div class="expand-drone-slot">
       <h4>${SLOT_NAMES[di]}</h4>
-      <div class="ds-row"><label>Name</label><input value="${d.name}" oninput="${path}.name=this.value;scheduleWrite()"></div>
+      <div class="ds-row"><label>Drone</label><select onchange="const _r=DRONE_ROSTER.find(x=>x.name===this.value);${path}.name=this.value;if(_r){${path}.grade=_r.grade;${path}.type=_r.type;}render();scheduleWrite()">${droneNameOptions(d.name)}</select></div>
       <div class="ds-row"><label>Type</label><select onchange="${path}.type=this.value;render();scheduleWrite()">${typeOpts}</select></div>
       <div class="ds-row"><label>Grade</label><select onchange="${path}.grade=this.value;render();scheduleWrite()">${gradeOpts}</select></div>
       <div class="ds-row"><label>Stars (0–35)</label><input type="number" value="${d.stars||0}" min="0" max="35" oninput="${path}.stars=+this.value;render();scheduleWrite()"></div>
