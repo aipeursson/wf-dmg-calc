@@ -683,6 +683,47 @@ function droneStatsAt(grade,level,stars){
   return {hp:Math.round(t.hp[i]*mult),atk:Math.round(t.atk[i]*mult)};
 }
 
+// Star tiers: 1-5 solid Yellow, then each of Red/Purple/Purple->Rainbow climbs the same
+// 5-star bar again in 0.5 steps (a half-star is half-previous-color/half-new-color).
+const STAR_TIERS=['none','yellow','red','purple','rainbow'];
+const STAR_TIER_LABEL={none:'— no stars —',yellow:'Yellow',red:'Red',purple:'Purple',rainbow:'Rainbow'};
+const STAR_TIER_DEFAULT_COUNT={none:0,yellow:1,red:0.5,purple:0.5,rainbow:0.5};
+function starsToTierCount(stars){
+  const s=Math.max(0,Math.min(35,stars||0));
+  if(s<=0) return {tier:'none',count:0};
+  if(s<=5) return {tier:'yellow',count:s};
+  if(s<=15) return {tier:'red',count:(s-5)/2};
+  if(s<=25) return {tier:'purple',count:(s-15)/2};
+  return {tier:'rainbow',count:(s-25)/2};
+}
+function tierCountToStars(tier,count){
+  switch(tier){
+    case 'yellow': return Math.round(count);
+    case 'red': return 5+Math.round(count*2);
+    case 'purple': return 15+Math.round(count*2);
+    case 'rainbow': return 25+Math.round(count*2);
+    default: return 0;
+  }
+}
+function starCountOptions(tier,current){
+  if(tier==='none') return '';
+  if(tier==='yellow') return [1,2,3,4,5].map(c=>
+    `<option value="${c}"${c===current?' selected':''}>${c} full</option>`).join('');
+  let html='';
+  for(let i=1;i<=10;i++){
+    const c=i/2, whole=Math.floor(c);
+    const label=(c%1!==0)?`${whole} full + 1 half`:`${whole} full`;
+    html+=`<option value="${c}"${c===current?' selected':''}>${label}</option>`;
+  }
+  return html;
+}
+function starPickerHtml(d,path,rebuildFn){
+  const {tier,count}=starsToTierCount(d.stars||0);
+  const tierOpts=STAR_TIERS.map(t=>`<option value="${t}"${t===tier?' selected':''}>${STAR_TIER_LABEL[t]}</option>`).join('');
+  return `<div class="ds-row"><label>Star Tier</label><select onchange="${path}.stars=tierCountToStars(this.value,STAR_TIER_DEFAULT_COUNT[this.value]);${rebuildFn}render();scheduleWrite()">${tierOpts}</select></div>
+      <div class="ds-row"><label>Star Count</label><select ${tier==='none'?'disabled':''} onchange="${path}.stars=tierCountToStars('${tier}',+this.value);render();scheduleWrite()">${starCountOptions(tier,count)}</select></div>`;
+}
+
 // All 23 drone passive families. low/high = Green L1 -> Orange L7 span (the full climb;
 // Blue/Purple sit between, approximated by even interpolation across Level 1-7 below).
 // note flags type-exclusivity or "no effect in PvP" (pierce/ricochet/slow/PvE-only skills).
@@ -761,7 +802,7 @@ function buildDronePanel(){
       <div class="ds-row"><label>Drone</label><select onchange="const _r=DRONE_ROSTER.find(x=>x.name===this.value);${path}.name=this.value;if(_r){${path}.grade=_r.grade;${path}.type=_r.type;}buildDronePanel();render();scheduleWrite()">${droneNameOptions(d.name)}</select></div>
       <div class="ds-row"><label>Type</label><select onchange="${path}.type=this.value;render();scheduleWrite()">${typeOpts}</select></div>
       <div class="ds-row" style="opacity:.65" title="Set automatically from the drone picked above"><label>Grade</label><input value="${DRONE_GRADES[d.grade||'']||'—'}" disabled></div>
-      <div class="ds-row"><label>Stars (0–35)</label><input type="number" value="${d.stars||0}" min="0" max="35" oninput="${path}.stars=+this.value;render();scheduleWrite()"></div>
+      ${starPickerHtml(d,path,'buildDronePanel();')}
       <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="${path}.level=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row" style="opacity:.65" title="Looked up from the official per-level HP/ATK progression table for this grade, scaled by the star-evolution bonus (+10%/star, +0% at ★1, +340% at ★35)"><label>Table ATK / HP (+stars)</label><input value="${dstat?`${dstat.atk} / ${dstat.hp}`:'select grade'}" disabled></div>
       <div class="ds-row"><label>Drone Dmg Boost%</label><input type="number" value="${d.dmgBoost||0}" step=".5" oninput="${path}.dmgBoost=+this.value;render();scheduleWrite()"></div>
@@ -837,7 +878,7 @@ function buildExpandRow(ei){
       <div class="ds-row"><label>Drone</label><select onchange="const _r=DRONE_ROSTER.find(x=>x.name===this.value);${path}.name=this.value;if(_r){${path}.grade=_r.grade;${path}.type=_r.type;}render();scheduleWrite()">${droneNameOptions(d.name)}</select></div>
       <div class="ds-row"><label>Type</label><select onchange="${path}.type=this.value;render();scheduleWrite()">${typeOpts}</select></div>
       <div class="ds-row" style="opacity:.65" title="Set automatically from the drone picked above"><label>Grade</label><input value="${DRONE_GRADES[d.grade||'']||'—'}" disabled></div>
-      <div class="ds-row"><label>Stars (0–35)</label><input type="number" value="${d.stars||0}" min="0" max="35" oninput="${path}.stars=+this.value;render();scheduleWrite()"></div>
+      ${starPickerHtml(d,path,'')}
       <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="${path}.level=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row" style="opacity:.65" title="Looked up from the official per-level HP/ATK progression table for this grade, scaled by the star-evolution bonus (+10%/star, +0% at ★1, +340% at ★35)"><label>Table ATK / HP (+stars)</label><input value="${dstat?`${dstat.atk} / ${dstat.hp}`:'select grade'}" disabled></div>
       <div class="ds-row"><label>Drone Dmg Boost%</label><input type="number" value="${d.dmgBoost||0}" step=".5" oninput="${path}.dmgBoost=+this.value;render();scheduleWrite()"></div>
