@@ -805,7 +805,8 @@ function buildDronePanel(){
       <h3>${SLOT_NAMES[i]}</h3>
       <div class="ds-row"><label>Drone</label><select onchange="const _r=DRONE_ROSTER.find(x=>x.name===this.value);${path}.name=this.value;if(_r){${path}.grade=_r.grade;${path}.type=_r.type;${path}.skMult=SKMULT_DEFAULT_BY_GRADE[_r.grade]||0;}buildDronePanel();render();scheduleWrite()">${droneNameOptions(d.name)}</select></div>
       ${starPickerHtml(d,path,'buildDronePanel();')}
-      <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="${path}.level=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200"
+        oninput="${path}.level=+this.value;scheduleWrite()" onchange="render()"></div>
       ${passiveRowsHtml(d,path,'buildDronePanel();')}
     </div>`;
   }).join('');
@@ -863,7 +864,8 @@ function buildExpandRow(ei){
       <h4>${SLOT_NAMES[di]}</h4>
       <div class="ds-row"><label>Drone</label><select onchange="const _r=DRONE_ROSTER.find(x=>x.name===this.value);${path}.name=this.value;if(_r){${path}.grade=_r.grade;${path}.type=_r.type;${path}.skMult=SKMULT_DEFAULT_BY_GRADE[_r.grade]||0;}render();scheduleWrite()">${droneNameOptions(d.name)}</select></div>
       ${starPickerHtml(d,path,'')}
-      <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="${path}.level=+this.value;render();scheduleWrite()"></div>
+      <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200"
+        oninput="${path}.level=+this.value;scheduleWrite()" onchange="render()"></div>
       ${passiveRowsHtml(d,path,'')}
     </div>`;
   }).join('');
