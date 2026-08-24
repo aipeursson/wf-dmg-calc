@@ -875,12 +875,12 @@ function buildExpandRow(ei){
       <div class="sf" style="flex:0 0 70px">
         <label>Grid</label>
         <input value="${e.label??''}" placeholder="A1" style="text-transform:uppercase"
-          oninput="ENEMIES[${ei}].label=this.value.trim()||null;render();scheduleWrite()">
+          oninput="ENEMIES[${ei}].label=this.value.trim()||null;scheduleWrite()" onchange="render()">
       </div>
       <div class="sf" style="flex:1">
         <label>Name</label>
         <input value="${e.name??''}" placeholder="Player name"
-          oninput="ENEMIES[${ei}].name=this.value;render();scheduleWrite()">
+          oninput="ENEMIES[${ei}].name=this.value;scheduleWrite()" onchange="render()">
       </div>
       <div class="sf" style="flex:0 0 100px">
         <label>BP</label>
