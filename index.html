@@ -389,21 +389,6 @@ const fidM    = (fi,fd) => { const fid=100+(fi||0)-(fd||0); return fid>=50?fid/1
 const droneED = (enh,dd) => dd==null?null:clamp((100+enh-dd)/100,1,2);
 const DSMCoeff = 0.0061873;
 
-function droneNAIR(atk,slotIdx,enemy){
-  const d=atk.drones[slotIdx];
-  const yourBoost=atk.drones.reduce((s,dr)=>s+(dr.dmgBoost||0),0);
-  const wpType=document.getElementById('wpType').value;
-  const extra=(wpType==='phys'?(d.physBoost||0):(d.energyBoost||0))+(d.naBoost||0);
-  const enemyResist=enemy.drones.reduce((s,dr)=>s+(dr.resistBoost||0),0);
-  return yourBoost-enemyResist+extra;
-}
-function droneSKIR(atk,slotIdx,enemy){
-  const d=atk.drones[slotIdx];
-  const yourBoost=atk.drones.reduce((s,dr)=>s+(dr.dmgBoost||0),0);
-  const enemyResist=enemy.drones.reduce((s,dr)=>s+(dr.resistBoost||0),0);
-  return yourBoost-enemyResist+(d.skillBoost||0);
-}
-
 // ═══════════════════════════════════════
 //  FIREBASE SYNC
 // ═══════════════════════════════════════
@@ -648,6 +633,9 @@ const DRONE_ROSTER=[
   {name:'Sentry',grade:'N',type:'reflect'},{name:'Guard',grade:'N',type:'reflect'},{name:'Knight',grade:'N',type:'reflect'},
   {name:'Gladiator',grade:'N',type:'burn'},{name:'Ranger',grade:'N',type:'burn'},{name:'Ninja',grade:'N',type:'burn'},
 ];
+// Skill multiplier defaults to the midpoint of each grade's documented range
+// (N 120-180%, R 170-255%, SR 200-300%) since there's no per-active-level input.
+const SKMULT_DEFAULT_BY_GRADE={N:150,R:212.5,SR:250};
 
 function droneNameOptions(currentName){
   let html=`<option value="">— unknown —</option>`;
@@ -754,8 +742,24 @@ function passiveValueAt(name,level){
   return +(p.low+(p.high-p.low)*(lvl-1)/6).toFixed(2);
 }
 
+// Maps a passive family name to the internal calc field it feeds. Families with no entry
+// here (Reflect/Burning Boost, Cheating Death, Overload Strike, Giant Bullet, ETR, EQR,
+// Explosive Shell, Armor Piercer, Tracking Bomb, Jamming Shot) aren't modeled by this
+// steady-state DPS index — see their notes for why.
+const PASSIVE_TO_FIELD={
+  'Drone Damage Boost':'dmgBoost','Physical Boost':'physBoost','Energy Boost':'energyBoost',
+  'Normal Attack Boost':'naBoost','Skill Boost':'skillBoost','Resistance Boost':'resistBoost',
+  'Trajectory Refined':'tr','Quick Reload':'qr','Cooldown Cut':'cc',
+  'Spot Weakness':'sw','Raging Assault':'ra','Precision Strike':'precisionStrike',
+};
+function passiveSum(d,field){
+  return (d.passives||[]).reduce((s,p)=>PASSIVE_TO_FIELD[p.name]===field?s+(p.value||0):s,0);
+}
+
+const PASSIVE_SLOT_COUNT=5;
 function passiveRowsHtml(d, pathPrefix){
   if(!d.passives) d.passives=[];
+  while(d.passives.length<PASSIVE_SLOT_COUNT) d.passives.push({name:'',value:0,level:1});
   const passiveOpts=`<option value="">— select passive —</option>`+DRONE_PASSIVES.map(p=>
     `<option value="${p.name}">${p.name} (${p.low}–${p.high}%${p.extra?', '+p.extra:''}${p.note?' — '+p.note:''})</option>`).join('');
   const levelOpts=[1,2,3,4,5,6,7].map(l=>`<option value="${l}">L${l}</option>`).join('');
@@ -771,14 +775,12 @@ function passiveRowsHtml(d, pathPrefix){
         ${levelOpts.replace(`value="${p.level}"`,`value="${p.level}" selected`)}
       </select>
       <span style="flex:0 0 46px;font-size:11px;color:var(--muted);align-self:center;text-align:right">${p.value??0}%</span>
-      <button class="btn" style="padding:2px 6px" onclick="${pathPrefix}.passives.splice(${pi},1);render();scheduleWrite()">✕</button>
+      <button class="btn" style="padding:2px 6px" title="Clear this slot" onclick="${pathPrefix}.passives[${pi}]={name:'',value:0,level:1};render();scheduleWrite()">✕</button>
     </div>`;
   }).join('');
-  const addBtn=`<button class="btn" style="margin-top:2px;width:100%" ${d.passives.length>=5?'disabled':''}
-    onclick="if(!${pathPrefix}.passives)${pathPrefix}.passives=[];${pathPrefix}.passives.push({name:'',value:0,level:1});render();scheduleWrite()">+ Add passive (${d.passives.length}/5)</button>`;
   return `<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
     <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Passives (passive → level → computed %)</div>
-    ${rows}${addBtn}
+    ${rows}
   </div>`;
 }
 
@@ -789,34 +791,21 @@ function buildDronePanel(){
     const dstat=d.grade?droneStatsAt(d.grade,d.level||1,d.stars||0):null;
     return `<div class="drone-slot">
       <h3>${SLOT_NAMES[i]}</h3>
-      <div class="ds-row"><label>Drone</label><select onchange="const _r=DRONE_ROSTER.find(x=>x.name===this.value);${path}.name=this.value;if(_r){${path}.grade=_r.grade;${path}.type=_r.type;}buildDronePanel();render();scheduleWrite()">${droneNameOptions(d.name)}</select></div>
+      <div class="ds-row"><label>Drone</label><select onchange="const _r=DRONE_ROSTER.find(x=>x.name===this.value);${path}.name=this.value;if(_r){${path}.grade=_r.grade;${path}.type=_r.type;${path}.skMult=SKMULT_DEFAULT_BY_GRADE[_r.grade]||0;}buildDronePanel();render();scheduleWrite()">${droneNameOptions(d.name)}</select></div>
       ${starPickerHtml(d,path,'buildDronePanel();')}
       <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="${path}.level=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row" style="opacity:.65" title="Looked up from the official per-level HP/ATK progression table for this grade, scaled by the star-evolution bonus (+10%/star, +0% at ★1, +340% at ★35)"><label>Table ATK / HP (+stars)</label><input value="${dstat?`${dstat.atk} / ${dstat.hp}`:'select grade'}" disabled></div>
-      <div class="ds-row"><label>Drone Dmg Boost%</label><input type="number" value="${d.dmgBoost||0}" step=".5" oninput="${path}.dmgBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Physical Boost%</label><input type="number" value="${d.physBoost||0}" step=".5" oninput="${path}.physBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Energy Boost%</label><input type="number" value="${d.energyBoost||0}" step=".5" oninput="${path}.energyBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Normal Atk Boost%</label><input type="number" value="${d.naBoost||0}" step=".5" oninput="${path}.naBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Skill Boost%</label><input type="number" value="${d.skillBoost||0}" step=".5" oninput="${path}.skillBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Skill Mult%</label><input type="number" value="${d.skMult||0}" step="1" title="Drone skill multiplier (e.g. 300 for SR max evolve)" oninput="${path}.skMult=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Experimental Trajectory Refined — adds extra NA trajectory only in the first 5s of battle. Not folded into the steady-state DPS/TTK index below; recorded for reference only.">ETR% (opening 5s only)</label><input type="number" value="${d.etr||0}" step=".5" oninput="${path}.etr=+this.value;scheduleWrite()"></div>
-      <div class="ds-row"><label title="Precision Strike passive — adds to this drone's own hit rate for its normal attack only (skills always hit regardless)">Precision Strike%</label><input type="number" value="${d.precisionStrike||0}" step=".5" oninput="${path}.precisionStrike=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="${path}.tr=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Quick Reload passive — speeds up normal attacks">Quick Reload%</label><input type="number" value="${d.qr||0}" step=".5" oninput="${path}.qr=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Cooldown Cut passive — speeds up skill attacks">Cooldown Cut%</label><input type="number" value="${d.cc||0}" step=".5" oninput="${path}.cc=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Spot Weakness passive — NA crit rate (independent of global crit)">Spot Weakness%</label><input type="number" value="${d.sw||0}" step=".5" oninput="${path}.sw=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Raging Assault passive — adds to base 200% NA crit damage">Raging Assault%</label><input type="number" value="${d.ra||0}" step=".5" oninput="${path}.ra=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Resistance Boost%</label><input type="number" value="${d.resistBoost||0}" step=".5" oninput="${path}.resistBoost=+this.value;render();scheduleWrite()"></div>
       ${passiveRowsHtml(d,path)}
     </div>`;
   }).join('');
 
-  const totalBoost=a.drones.reduce((s,d)=>s+(d.dmgBoost||0),0);
+  const totalBoost=a.drones.reduce((s,d)=>s+passiveSum(d,'dmgBoost'),0);
   document.getElementById('droneBody').innerHTML=
     `<div class="drone-grid">${slots}</div>
      <div class="drone-formula">
-       <strong>NA col</strong> = TR × F((IR + DroneNAIR) / 100) &nbsp;|&nbsp; TR = 1 + TR%/100 &nbsp;|&nbsp; DroneNAIR = Σ DmgBoost (<strong>${totalBoost}%</strong>) − Σ EnemyResist + Phys/Energy/NA Boost<br>
-       <strong>SK col</strong> = SkMult% / 100 × F((IR + DroneSKIR) / 100) &nbsp;|&nbsp; DroneSKIR = Σ DmgBoost − Σ EnemyResist + Skill Boost &nbsp;(SK col shows raw IR mult if SkMult not set)<br>
+       All boost/rate values below come from each drone's <strong>Passives</strong> picks, not manual fields.<br>
+       <strong>NA col</strong> = TR × F((IR + DroneNAIR) / 100) &nbsp;|&nbsp; TR = 1 + TrajectoryRefined%/100 &nbsp;|&nbsp; DroneNAIR = Σ DmgBoost (<strong>${totalBoost}%</strong>) − Σ EnemyResist + Phys/Energy/NA Boost<br>
+       <strong>SK col</strong> = SkMult% / 100 × F((IR + DroneSKIR) / 100) &nbsp;|&nbsp; DroneSKIR = Σ DmgBoost − Σ EnemyResist + Skill Boost &nbsp;(SkMult is auto-set from grade; SK col shows raw IR mult if 0)<br>
        <strong>DroneED</strong> = (100 + your Enh − enemy Dec) / 100, clamped [1.0, 2.0] &nbsp;|&nbsp; <strong>IR</strong> = pvp_inc + dmg_inc − pvp_red − dmg_red<br>
        <strong>NA hit%</strong> = min(80,max(20,100+Hit+PrecisionStrike%−enemy Dodge)) / 80 &nbsp;— NA rolls hit/dodge like gear; skills always hit
      </div>`;
@@ -862,24 +851,10 @@ function buildExpandRow(ei){
     const dstat=d.grade?droneStatsAt(d.grade,d.level||1,d.stars||0):null;
     return `<div class="expand-drone-slot">
       <h4>${SLOT_NAMES[di]}</h4>
-      <div class="ds-row"><label>Drone</label><select onchange="const _r=DRONE_ROSTER.find(x=>x.name===this.value);${path}.name=this.value;if(_r){${path}.grade=_r.grade;${path}.type=_r.type;}render();scheduleWrite()">${droneNameOptions(d.name)}</select></div>
+      <div class="ds-row"><label>Drone</label><select onchange="const _r=DRONE_ROSTER.find(x=>x.name===this.value);${path}.name=this.value;if(_r){${path}.grade=_r.grade;${path}.type=_r.type;${path}.skMult=SKMULT_DEFAULT_BY_GRADE[_r.grade]||0;}render();scheduleWrite()">${droneNameOptions(d.name)}</select></div>
       ${starPickerHtml(d,path,'')}
       <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="${path}.level=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row" style="opacity:.65" title="Looked up from the official per-level HP/ATK progression table for this grade, scaled by the star-evolution bonus (+10%/star, +0% at ★1, +340% at ★35)"><label>Table ATK / HP (+stars)</label><input value="${dstat?`${dstat.atk} / ${dstat.hp}`:'select grade'}" disabled></div>
-      <div class="ds-row"><label>Drone Dmg Boost%</label><input type="number" value="${d.dmgBoost||0}" step=".5" oninput="${path}.dmgBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Physical Boost%</label><input type="number" value="${d.physBoost||0}" step=".5" oninput="${path}.physBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Energy Boost%</label><input type="number" value="${d.energyBoost||0}" step=".5" oninput="${path}.energyBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Normal Atk Boost%</label><input type="number" value="${d.naBoost||0}" step=".5" oninput="${path}.naBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Skill Boost%</label><input type="number" value="${d.skillBoost||0}" step=".5" oninput="${path}.skillBoost=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Skill Mult%</label><input type="number" value="${d.skMult||0}" step="1" title="Drone skill multiplier (e.g. 300 for SR max evolve)" oninput="${path}.skMult=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Experimental Trajectory Refined — adds extra NA trajectory only in the first 5s of battle. Not folded into the steady-state DPS/TTK index below; recorded for reference only.">ETR% (opening 5s only)</label><input type="number" value="${d.etr||0}" step=".5" oninput="${path}.etr=+this.value;scheduleWrite()"></div>
-      <div class="ds-row"><label title="Precision Strike passive — adds to this drone's own hit rate for its normal attack only (skills always hit regardless)">Precision Strike%</label><input type="number" value="${d.precisionStrike||0}" step=".5" oninput="${path}.precisionStrike=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>TR%</label><input type="number" value="${d.tr||0}" step=".5" oninput="${path}.tr=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Quick Reload passive">Quick Reload%</label><input type="number" value="${d.qr||0}" step=".5" oninput="${path}.qr=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Cooldown Cut passive">Cooldown Cut%</label><input type="number" value="${d.cc||0}" step=".5" oninput="${path}.cc=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Spot Weakness passive — NA crit rate">Spot Weakness%</label><input type="number" value="${d.sw||0}" step=".5" oninput="${path}.sw=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label title="Raging Assault passive — adds to 200% base NA crit damage">Raging Assault%</label><input type="number" value="${d.ra||0}" step=".5" oninput="${path}.ra=+this.value;render();scheduleWrite()"></div>
-      <div class="ds-row"><label>Resistance Boost%</label><input type="number" value="${d.resistBoost||0}" step=".5" oninput="${path}.resistBoost=+this.value;render();scheduleWrite()"></div>
       ${passiveRowsHtml(d,path)}
     </div>`;
   }).join('');
@@ -932,10 +907,24 @@ function colorH(v){return v>=65?'good':v>=45?'ok':v>=30?'bad':'vbad';}
 function colorM(v,t=[0.9,0.75,0.6]){if(v==null)return '';return v>=t[0]?'good':v>=t[1]?'ok':v>=t[2]?'bad':'vbad';}
 function fmtNull(v,d=3){return v==null?'<span style="color:var(--muted)">—</span>':(+v).toFixed(d);}
 
+// Backfills grade/type/skMult for drones saved before those fields existed (matched by
+// name against the roster), and defaults skMult for any drone missing it once grade is
+// known. Idempotent — safe to call on every render.
+function ensureDroneDefaults(d){
+  if(!d.grade){
+    const r=DRONE_ROSTER.find(x=>x.name===d.name);
+    if(r){ d.grade=r.grade; if(!d.type) d.type=r.type; }
+  }
+  if(!d.skMult && d.grade) d.skMult=SKMULT_DEFAULT_BY_GRADE[d.grade]||0;
+}
+
 function render(){
   const atk=ATK_DB[currentAtk];
   const wpType=document.getElementById('wpType').value;
   const enemyType=document.getElementById('enemyType').value;
+
+  atk.drones.forEach(ensureDroneDefaults);
+  ENEMIES.forEach(e=>e.drones.forEach(ensureDroneDefaults));
 
   // Update slot header labels with current drone names
   atk.drones.forEach((d,i)=>{
@@ -946,7 +935,7 @@ function render(){
   // Shared per-slot enh keys
   const enhKey=d=>d.type==='burn'?'burn_enh':d.type==='elec'?'elec_enh':'reflect_enh';
   const decKey=d=>d.type==='burn'?'burn_dec':d.type==='elec'?'elec_dec':'reflect_dec';
-  const totalDmgBoost=atk.drones.reduce((s,d)=>s+(d.dmgBoost||0),0);
+  const totalDmgBoost=atk.drones.reduce((s,d)=>s+passiveSum(d,'dmgBoost'),0);
 
   const titanMul=document.getElementById('titanGear').checked?1.3:1;
   // WeaponIR weights: MG≈41%, WG≈29%, MS≈30% (from WpCoeff/cooldown ratios)
@@ -977,26 +966,26 @@ function render(){
     const hed=Math.max(0,(100+(atk.heal_enh||0)-(e.heal_dec||0))/100);
     const dps=(hit/80)*cf*dbd*ir*fm;
 
-    const enemyResist=e.drones.reduce((s,d)=>s+(d.resistBoost||0),0);
+    const enemyResist=e.drones.reduce((s,d)=>s+passiveSum(d,'resistBoost'),0);
     const slots=atk.drones.map(d=>{
       const ek=enhKey(d), dk=decKey(d);
       const ed=droneED((atk[ek]||0),e[dk]);
       // Drone IR uses same base IR as weapons but no WeaponIR (weapon-specific)
       const baseIR=(atk.pvp_inc||0)+(atk.dmg_inc||0)+areaAdj-(e.pvp_red||0)-(e.dmg_red||0);
-      const nairExtra=(wpType==='phys'?(d.physBoost||0):(d.energyBoost||0))+(d.naBoost||0);
+      const nairExtra=(wpType==='phys'?passiveSum(d,'physBoost'):passiveSum(d,'energyBoost'))+passiveSum(d,'naBoost');
       const naIR=F((baseIR+totalDmgBoost-enemyResist+nairExtra)/100);
-      const skIR=F((baseIR+totalDmgBoost-enemyResist+(d.skillBoost||0))/100);
-      const tr=1+(d.tr||0)/100;
+      const skIR=F((baseIR+totalDmgBoost-enemyResist+passiveSum(d,'skillBoost'))/100);
+      const tr=1+passiveSum(d,'tr')/100;
       const sm=(d.skMult||0)/100;
       const na=tr*naIR;
       const sk=sm>0?sm*skIR:skIR;
       const hasSkMult=sm>0;
-      const naFreq=1+(d.qr||0)/100;
-      const skFreq=hasSkMult?(1+(d.cc||0)/100)/3:0;
+      const naFreq=1+passiveSum(d,'qr')/100;
+      const skFreq=hasSkMult?(1+passiveSum(d,'cc')/100)/3:0;
       // NA crit factor: Spot Weakness% crit rate, base 200%+Raging Assault crit dmg (independent of global)
-      const naCritF=1+(d.sw||0)/100*((200+(d.ra||0))/100-1);
+      const naCritF=1+passiveSum(d,'sw')/100*((200+passiveSum(d,'ra'))/100-1);
       // Precision Strike adds to this drone's own hit rate — NA is subject to hit/dodge like gear; skills always hit.
-      const naHit=hitPct(atk.hit+(d.precisionStrike||0), e.dodge)/80;
+      const naHit=hitPct(atk.hit+passiveSum(d,'precisionStrike'), e.dodge)/80;
       // per TAA·dbd·fm (skills always hit and never crit; NA rolls hit like gear)
       const droneDpsMul=DSMCoeff*(ed??1)*(tr*naIR*naFreq*naCritF*naHit+sm*skIR*skFreq);
       return {ed,na,sk,hasSkMult,droneDpsMul};
@@ -1033,20 +1022,22 @@ function render(){
       const eTAA=(e.mg_atk||0)+(e.wg_atk||0)+(e.ms_atk||0);
       // Enemy drone DPS against us
       const eBaseIR=(e.pvp_inc||0)+(e.dmg_inc||0)+eAreaAdj-(atk.pvp_red||0)-(atk.dmg_red||0);
-      const eTotalDmgBoost=e.drones.reduce((s,d)=>s+(d.dmgBoost||0),0);
-      const eAtkResist=atk.drones.reduce((s,d)=>s+(d.resistBoost||0),0);
+      const eTotalDmgBoost=e.drones.reduce((s,d)=>s+passiveSum(d,'dmgBoost'),0);
+      const eAtkResist=atk.drones.reduce((s,d)=>s+passiveSum(d,'resistBoost'),0);
       const eTotalDroneDpsMul=e.drones.reduce((s,d)=>{
         const ek=enhKey(d),dk=decKey(d);
-        const eDED=clamp((100+(e[ek]||0)+(d.etr||0)-(atk[dk]||0))/100,1,2);
-        const nairExtra=(wpType==='phys'?(d.physBoost||0):(d.energyBoost||0))+(d.naBoost||0);
+        const eDED=droneED((e[ek]||0),atk[dk]);
+        const nairExtra=(wpType==='phys'?passiveSum(d,'physBoost'):passiveSum(d,'energyBoost'))+passiveSum(d,'naBoost');
         const eDroneNaIR=F((eBaseIR+eTotalDmgBoost-eAtkResist+nairExtra)/100);
-        const eDroneSKIR=F((eBaseIR+eTotalDmgBoost-eAtkResist+(d.skillBoost||0))/100);
-        const eTR=1+(d.tr||0)/100;
+        const eDroneSKIR=F((eBaseIR+eTotalDmgBoost-eAtkResist+passiveSum(d,'skillBoost'))/100);
+        const eTR=1+passiveSum(d,'tr')/100;
         const eSM=(d.skMult||0)/100;
-        const naFreq=1+(d.qr||0)/100;
-        const skFreq=eSM>0?(1+(d.cc||0)/100)/3:0;
-        const naCritF=1+(d.sw||0)/100*((200+(d.ra||0))/100-1);
-        return s+DSMCoeff*eDED*(eTR*eDroneNaIR*naFreq*naCritF+eSM*eDroneSKIR*skFreq);
+        const naFreq=1+passiveSum(d,'qr')/100;
+        const skFreq=eSM>0?(1+passiveSum(d,'cc')/100)/3:0;
+        const naCritF=1+passiveSum(d,'sw')/100*((200+passiveSum(d,'ra'))/100-1);
+        // Precision Strike adds to this drone's own hit rate — NA rolls hit/dodge like gear; skills always hit.
+        const naHit=hitPct((e.hit||0)+passiveSum(d,'precisionStrike'), atk.dodge)/80;
+        return s+DSMCoeff*(eDED??1)*(eTR*eDroneNaIR*naFreq*naCritF*naHit+eSM*eDroneSKIR*skFreq);
       },0);
       if(atk.hp&&eTAA) theirKillRate=(eDps+(calcMode==='full'?eTotalDroneDpsMul:0)*eDbd*eFm)*eTAA/atk.hp;
     }
@@ -1166,25 +1157,27 @@ function buildSimData(shooter,target,cfg){
 
   const enhKey=d=>d.type==='burn'?'burn_enh':d.type==='elec'?'elec_enh':'reflect_enh';
   const decKey=d=>d.type==='burn'?'burn_dec':d.type==='elec'?'elec_dec':'reflect_dec';
-  const totalBoost=shooter.drones.reduce((s,d)=>s+(d.dmgBoost||0),0);
-  const eResist=target.drones.reduce((s,d)=>s+(d.resistBoost||0),0);
+  const totalBoost=shooter.drones.reduce((s,d)=>s+passiveSum(d,'dmgBoost'),0);
+  const eResist=target.drones.reduce((s,d)=>s+passiveSum(d,'resistBoost'),0);
 
   const drones=shooter.drones.map(d=>{
     const ek=enhKey(d),dk=decKey(d);
-    const ed=clamp((100+(shooter[ek]||0)+(d.etr||0)-(target[dk]||0))/100,1,2);
-    const nairX=(wpType==='phys'?(d.physBoost||0):(d.energyBoost||0))+(d.naBoost||0);
+    const ed=clamp((100+(shooter[ek]||0)-(target[dk]||0))/100,1,2);
+    const nairX=(wpType==='phys'?passiveSum(d,'physBoost'):passiveSum(d,'energyBoost'))+passiveSum(d,'naBoost');
     const naIR=F((baseIR+totalBoost-eResist+nairX)/100);
-    const skIR=F((baseIR+totalBoost-eResist+(d.skillBoost||0))/100);
-    const tr=1+(d.tr||0)/100;
+    const skIR=F((baseIR+totalBoost-eResist+passiveSum(d,'skillBoost'))/100);
+    const tr=1+passiveSum(d,'tr')/100;
     const sm=(d.skMult||0)/100;
     const isBurn=d.type==='burn';
     const naBase=tr*ed*DSMCoeff*taa*dbd*naIR*fm;
-    const naCritF=(200+(d.ra||0))/100;
-    const naCritP=Math.min(80,d.sw||0);
+    const naCritF=(200+passiveSum(d,'ra'))/100;
+    const naCritP=Math.min(80,passiveSum(d,'sw'));
     const skDmg=(!isBurn&&sm>0)?sm*ed*DSMCoeff*taa*dbd*skIR*fm:0;
     const burnContrib=isBurn?0.7*ed*DSMCoeff*taa*dbd*skIR*fm:0;
-    return {naBase,naCritF,naCritP,naHitP:hitP,skDmg,burnContrib,isBurn,
-            naCd:1/(1+(d.qr||0)/100),skCd:3/(1+(d.cc||0)/100)};
+    // Precision Strike adds to this drone's own hit rate — NA rolls hit/dodge like gear; skills always hit.
+    const naHitP=Math.min(80,Math.max(20,100+(shooter.hit||0)+passiveSum(d,'precisionStrike')-(target.dodge||0)));
+    return {naBase,naCritF,naCritP,naHitP,skDmg,burnContrib,isBurn,
+            naCd:1/(1+passiveSum(d,'qr')/100),skCd:3/(1+passiveSum(d,'cc')/100)};
   });
 
   return {weapons,drones};
