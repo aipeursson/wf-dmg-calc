@@ -683,51 +683,69 @@ function droneStatsAt(grade,level,stars){
   return {hp:Math.round(t.hp[i]*mult),atk:Math.round(t.atk[i]*mult)};
 }
 
-// All 23 drone passive families. range = Green L1 -> Orange L7 span (Blue/Purple sit between).
+// All 23 drone passive families. low/high = Green L1 -> Orange L7 span (the full climb;
+// Blue/Purple sit between, approximated by even interpolation across Level 1-7 below).
 // note flags type-exclusivity or "no effect in PvP" (pierce/ricochet/slow/PvE-only skills).
+// extra = fixed secondary detail that doesn't scale with level (shown, not interpolated).
 const DRONE_PASSIVES=[
-  {name:'Skill Boost',range:'2–35%',note:'Electric only'},
-  {name:'Reflect Boost',range:'2–35%',note:'Reflect only'},
-  {name:'Burning Boost',range:'2–35%',note:'Burning only'},
-  {name:'Cooldown Cut',range:'2–35%'},
-  {name:'Drone Damage Boost',range:'2–20%'},
-  {name:'Resistance Boost',range:'2–20%'},
-  {name:'Cheating Death',range:'3–35% chance, 30% recover'},
-  {name:'Overload Strike',range:'1.5–24.5%',note:'PvE only — no effect in PvP'},
-  {name:'Normal Attack Boost',range:'2.5–42%'},
-  {name:'Physical Boost',range:'3–49%'},
-  {name:'Energy Boost',range:'3–49%'},
-  {name:'Precision Strike',range:'2.5–42%'},
-  {name:'Spot Weakness',range:'1.5–24.5%'},
-  {name:'Raging Assault',range:'3–50%'},
-  {name:'Quick Reload',range:'2.5–42%'},
-  {name:'Giant Bullet',range:'3–50%',note:'no effect in PvP'},
-  {name:'Trajectory Refined',range:'2.5–42%'},
-  {name:'Experimental Trajectory Refined',range:'3–49%, first 5s'},
-  {name:'Experimental Quick Reload',range:'3–49%, after 5s'},
-  {name:'Explosive Shell',range:'106–205%',note:'no effect in PvP'},
-  {name:'Armor Piercer',range:'106–205%, pierce 2',note:'no effect in PvP'},
-  {name:'Tracking Bomb',range:'106–205%, ricochet 3',note:'no effect in PvP'},
-  {name:'Jamming Shot',range:'1–20%',note:'no effect in PvP'},
+  {name:'Skill Boost',low:2,high:35,note:'Electric only'},
+  {name:'Reflect Boost',low:2,high:35,note:'Reflect only'},
+  {name:'Burning Boost',low:2,high:35,note:'Burning only'},
+  {name:'Cooldown Cut',low:2,high:35},
+  {name:'Drone Damage Boost',low:2,high:20},
+  {name:'Resistance Boost',low:2,high:20},
+  {name:'Cheating Death',low:3,high:35,extra:'30% recover'},
+  {name:'Overload Strike',low:1.5,high:24.5,note:'PvE only — no effect in PvP'},
+  {name:'Normal Attack Boost',low:2.5,high:42},
+  {name:'Physical Boost',low:3,high:49},
+  {name:'Energy Boost',low:3,high:49},
+  {name:'Precision Strike',low:2.5,high:42},
+  {name:'Spot Weakness',low:1.5,high:24.5},
+  {name:'Raging Assault',low:3,high:50},
+  {name:'Quick Reload',low:2.5,high:42},
+  {name:'Giant Bullet',low:3,high:50,note:'no effect in PvP'},
+  {name:'Trajectory Refined',low:2.5,high:42,extra:'+1 trajectory'},
+  {name:'Experimental Trajectory Refined',low:3,high:49,extra:'+1 trajectory, first 5s'},
+  {name:'Experimental Quick Reload',low:3,high:49,extra:'after 5s'},
+  {name:'Explosive Shell',low:106,high:205,note:'no effect in PvP'},
+  {name:'Armor Piercer',low:106,high:205,note:'no effect in PvP',extra:'pierce 2'},
+  {name:'Tracking Bomb',low:106,high:205,note:'no effect in PvP',extra:'ricochet 3'},
+  {name:'Jamming Shot',low:1,high:20,note:'no effect in PvP'},
 ];
+
+// Approximates the Green-L1..Orange-L7 climb as 7 even steps (rarity tiers within that
+// span aren't individually documented, so this is a simplified single Level 1-7 dial).
+function passiveValueAt(name,level){
+  const p=DRONE_PASSIVES.find(x=>x.name===name);
+  if(!p) return 0;
+  const lvl=Math.min(7,Math.max(1,level||1));
+  return +(p.low+(p.high-p.low)*(lvl-1)/6).toFixed(2);
+}
 
 function passiveRowsHtml(d, pathPrefix){
   if(!d.passives) d.passives=[];
   const passiveOpts=`<option value="">— select passive —</option>`+DRONE_PASSIVES.map(p=>
-    `<option value="${p.name}">${p.name} (${p.range}${p.note?' — '+p.note:''})</option>`).join('');
-  const rows=d.passives.map((p,pi)=>`
+    `<option value="${p.name}">${p.name} (${p.low}–${p.high}%${p.extra?', '+p.extra:''}${p.note?' — '+p.note:''})</option>`).join('');
+  const levelOpts=[1,2,3,4,5,6,7].map(l=>`<option value="${l}">L${l}</option>`).join('');
+  const rows=d.passives.map((p,pi)=>{
+    if(p.level==null) p.level=1;
+    return `
     <div class="ds-row" style="gap:4px">
-      <select style="flex:2" onchange="${pathPrefix}.passives[${pi}].name=this.value;scheduleWrite()">
+      <select style="flex:2" onchange="const _v=this.value;${pathPrefix}.passives[${pi}].name=_v;${pathPrefix}.passives[${pi}].value=passiveValueAt(_v,${pathPrefix}.passives[${pi}].level);render();scheduleWrite()">
         ${passiveOpts.replace(`value="${p.name}"`,`value="${p.name}" selected`)}
       </select>
-      <input type="number" placeholder="Val%" value="${p.value||0}" step=".5" style="flex:1;min-width:50px"
-        oninput="${pathPrefix}.passives[${pi}].value=+this.value;render();scheduleWrite()">
+      <select style="flex:0 0 55px" title="Approximate rarity/level dial (Green L1 → Orange L7)"
+        onchange="${pathPrefix}.passives[${pi}].level=+this.value;${pathPrefix}.passives[${pi}].value=passiveValueAt('${p.name}',+this.value);render();scheduleWrite()">
+        ${levelOpts.replace(`value="${p.level}"`,`value="${p.level}" selected`)}
+      </select>
+      <span style="flex:0 0 46px;font-size:11px;color:var(--muted);align-self:center;text-align:right">${p.value??0}%</span>
       <button class="btn" style="padding:2px 6px" onclick="${pathPrefix}.passives.splice(${pi},1);render();scheduleWrite()">✕</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   const addBtn=`<button class="btn" style="margin-top:2px;width:100%" ${d.passives.length>=5?'disabled':''}
-    onclick="if(!${pathPrefix}.passives)${pathPrefix}.passives=[];${pathPrefix}.passives.push({name:'',value:0});render();scheduleWrite()">+ Add passive (${d.passives.length}/5)</button>`;
+    onclick="if(!${pathPrefix}.passives)${pathPrefix}.passives=[];${pathPrefix}.passives.push({name:'',value:0,level:1});render();scheduleWrite()">+ Add passive (${d.passives.length}/5)</button>`;
   return `<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
-    <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Passives</div>
+    <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Passives (passive → level → computed %)</div>
     ${rows}${addBtn}
   </div>`;
 }
@@ -736,14 +754,13 @@ function buildDronePanel(){
   const a=ATK_DB[currentAtk];
   const slots=a.drones.map((d,i)=>{
     const typeOpts=['burn','elec','reflect'].map(t=>`<option value="${t}"${d.type===t?' selected':''}>${t[0].toUpperCase()+t.slice(1)}</option>`).join('');
-    const gradeOpts=Object.keys(DRONE_GRADES).map(g=>`<option value="${g}"${(d.grade||'')===g?' selected':''}>${DRONE_GRADES[g]}</option>`).join('');
     const path=`ATK_DB['${currentAtk}'].drones[${i}]`;
     const dstat=d.grade?droneStatsAt(d.grade,d.level||1,d.stars||0):null;
     return `<div class="drone-slot">
       <h3>${SLOT_NAMES[i]}</h3>
       <div class="ds-row"><label>Drone</label><select onchange="const _r=DRONE_ROSTER.find(x=>x.name===this.value);${path}.name=this.value;if(_r){${path}.grade=_r.grade;${path}.type=_r.type;}buildDronePanel();render();scheduleWrite()">${droneNameOptions(d.name)}</select></div>
       <div class="ds-row"><label>Type</label><select onchange="${path}.type=this.value;render();scheduleWrite()">${typeOpts}</select></div>
-      <div class="ds-row"><label>Grade</label><select onchange="${path}.grade=this.value;render();scheduleWrite()">${gradeOpts}</select></div>
+      <div class="ds-row" style="opacity:.65" title="Set automatically from the drone picked above"><label>Grade</label><input value="${DRONE_GRADES[d.grade||'']||'—'}" disabled></div>
       <div class="ds-row"><label>Stars (0–35)</label><input type="number" value="${d.stars||0}" min="0" max="35" oninput="${path}.stars=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="${path}.level=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row" style="opacity:.65" title="Looked up from the official per-level HP/ATK progression table for this grade, scaled by the star-evolution bonus (+10%/star, +0% at ★1, +340% at ★35)"><label>Table ATK / HP (+stars)</label><input value="${dstat?`${dstat.atk} / ${dstat.hp}`:'select grade'}" disabled></div>
@@ -813,14 +830,13 @@ function buildExpandRow(ei){
 
   const droneSlots=e.drones.map((d,di)=>{
     const typeOpts=['burn','elec','reflect'].map(t=>`<option value="${t}"${d.type===t?' selected':''}>${t[0].toUpperCase()+t.slice(1)}</option>`).join('');
-    const gradeOpts=Object.keys(DRONE_GRADES).map(g=>`<option value="${g}"${(d.grade||'')===g?' selected':''}>${DRONE_GRADES[g]}</option>`).join('');
     const path=`ENEMIES[${ei}].drones[${di}]`;
     const dstat=d.grade?droneStatsAt(d.grade,d.level||1,d.stars||0):null;
     return `<div class="expand-drone-slot">
       <h4>${SLOT_NAMES[di]}</h4>
       <div class="ds-row"><label>Drone</label><select onchange="const _r=DRONE_ROSTER.find(x=>x.name===this.value);${path}.name=this.value;if(_r){${path}.grade=_r.grade;${path}.type=_r.type;}render();scheduleWrite()">${droneNameOptions(d.name)}</select></div>
       <div class="ds-row"><label>Type</label><select onchange="${path}.type=this.value;render();scheduleWrite()">${typeOpts}</select></div>
-      <div class="ds-row"><label>Grade</label><select onchange="${path}.grade=this.value;render();scheduleWrite()">${gradeOpts}</select></div>
+      <div class="ds-row" style="opacity:.65" title="Set automatically from the drone picked above"><label>Grade</label><input value="${DRONE_GRADES[d.grade||'']||'—'}" disabled></div>
       <div class="ds-row"><label>Stars (0–35)</label><input type="number" value="${d.stars||0}" min="0" max="35" oninput="${path}.stars=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row"><label>Level</label><input type="number" value="${d.level}" min="0" max="200" oninput="${path}.level=+this.value;render();scheduleWrite()"></div>
       <div class="ds-row" style="opacity:.65" title="Looked up from the official per-level HP/ATK progression table for this grade, scaled by the star-evolution bonus (+10%/star, +0% at ★1, +340% at ★35)"><label>Table ATK / HP (+stars)</label><input value="${dstat?`${dstat.atk} / ${dstat.hp}`:'select grade'}" disabled></div>
