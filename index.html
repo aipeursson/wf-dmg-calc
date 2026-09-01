@@ -24,6 +24,7 @@ let currentWeek = WEEKS[WEEKS.length - 1].id;
 
 <script src="https://www.gstatic.com/firebasejs/12.16.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.16.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <style>
 :root{
@@ -146,6 +147,8 @@ tr.mu-loss>td:first-child{border-left:3px solid var(--red);}
     <button onclick="setNickname()">Let's go</button>
   </div>
 </div>
+
+<div id="ocrModalRoot"></div>
 
 <header>
   <div><h1 id="pageTitle">⚔ WF 071926 – Damage Calculator</h1><div class="sub" id="pageSubtitle">The Astral Vanguard vs 野生の王国</div></div>
@@ -848,6 +851,149 @@ const ENEMY_FIELDS=[
   ['mg_spd','MG Attack Rate %'],['wg_spd','WG Attack Rate %'],['ms_spd','MS Attack Rate %'],
 ];
 
+// ═══════════════════════════════════════
+//  SCREENSHOT OCR SCAN
+// ═══════════════════════════════════════
+// Each of the 9 Attributes Comparison screens, in the order their rows appear.
+// detect = lowercase substring of the first row's label, used to identify which
+// screen was scanned. integer = true means values have no % sign (whole numbers).
+const SCREEN_DEFS=[
+  {id:1,detect:'maingun attack',fields:['mg_atk','wg_atk','ms_atk','hp'],integer:true},
+  {id:2,detect:'crit rate',fields:['crit','dodge','elec_enh','burn_enh','reflect_enh']},
+  {id:3,detect:'crit resistance',fields:['crit_res','hit','elec_dec','burn_dec','reflect_dec']},
+  {id:4,detect:'physical defense break',fields:['pdb','pd','edb','ed','fid_inc','fid_dec']},
+  {id:5,detect:'sentinel enhancement',fields:['sentinel_enh','sentinel_dec','heal_enh','heal_dec','dmg_inc','dmg_red']},
+  {id:6,detect:'pvp damage increase',fields:['pvp_inc','pvp_red','aerial_inc','aerial_red','ground_inc','ground_red']},
+  {id:7,detect:'maingun attack rate',fields:['mg_spd','wg_spd','ms_spd','crit_dmg','crit_dmg_res','mg_crit']},
+  {id:8,detect:'maingun crit resistance',fields:['mg_crit_res','wg_crit','wg_crit_res','ms_crit','ms_crit_res','mg_crit_dmg']},
+  {id:9,detect:'crit damage reduction caused by maingun',fields:['mg_crit_dmg_res','wg_crit_dmg','wg_crit_dmg_res','ms_crit_dmg','ms_crit_dmg_res']},
+];
+const FIELD_LABEL_MAP=Object.fromEntries(ATK_FIELDS);
+
+// Parses OCR text into {left,label,right} rows. Each stat row reads
+// "<left value>[%] <row label text> <right value>[%]" — grabs the two numbers
+// per line and keeps the (possibly garbled) label text in between for screen ID.
+function ocrParseLines(text){
+  const re=/^([\d,]+(?:\.\d+)?)\s*%?\s+(.+?)\s+([\d,]+(?:\.\d+)?)\s*%?$/;
+  return text.split('\n').map(l=>l.trim()).filter(Boolean)
+    .map(line=>{
+      const m=line.match(re);
+      if(!m) return null;
+      return {left:parseFloat(m[1].replace(/,/g,'')),label:m[2].trim(),right:parseFloat(m[3].replace(/,/g,''))};
+    }).filter(Boolean);
+}
+
+// Identifies which of the 9 screens was scanned. Tries matching the first row's
+// label text first (most reliable signal), preferring the longest/most specific
+// detect string when more than one matches as a substring (e.g. "maingun crit
+// resistance" also contains "crit resistance" — the longer match wins). Falls
+// back to matching row count if the label OCR'd too badly to recognize at all.
+function detectScreen(rows){
+  if(!rows.length) return null;
+  const firstLabel=rows[0].label.toLowerCase();
+  const matches=SCREEN_DEFS.filter(s=>firstLabel.includes(s.detect));
+  if(matches.length) return matches.reduce((a,b)=>b.detect.length>a.detect.length?b:a);
+  return SCREEN_DEFS.find(s=>s.fields.length===rows.length)||null;
+}
+
+let ocrTarget=null, ocrReview=null;
+
+function ocrStatusEl(ei){ return document.getElementById(`ocrStatus-${ei}`); }
+
+async function handleOcrFile(file, ei){
+  if(!file) return;
+  ocrTarget={ei};
+  const statusEl=ocrStatusEl(ei);
+  if(statusEl){ statusEl.style.color='var(--muted)'; statusEl.textContent='Reading image…'; }
+  try{
+    const {data:{text}}=await Tesseract.recognize(file,'eng',{
+      logger:m=>{ if(statusEl&&m.status) statusEl.textContent=`${m.status} ${Math.round((m.progress||0)*100)}%`; }
+    });
+    const rows=ocrParseLines(text);
+    if(!rows.length){
+      if(statusEl){ statusEl.style.color='var(--red)'; statusEl.textContent='No stat rows recognized — try a clearer screenshot.'; }
+      return;
+    }
+    const screen=detectScreen(rows);
+    if(statusEl) statusEl.textContent='';
+    buildOcrReview(screen,rows);
+  }catch(err){
+    if(statusEl){ statusEl.style.color='var(--red)'; statusEl.textContent='OCR failed: '+err.message; }
+  }
+}
+
+function buildOcrReview(screen,rows){
+  const fieldKeys=screen?screen.fields:rows.map((_,i)=>`row${i+1}`);
+  const items=fieldKeys.map((k,i)=>({
+    key:k,
+    label:FIELD_LABEL_MAP[k]||k,
+    left:rows[i]?rows[i].left:null,
+    right:rows[i]?rows[i].right:null,
+  }));
+  ocrReview={
+    screenName:screen?`Screen ${screen.id} of 9`:`Unrecognized screen (${rows.length} rows)`,
+    mismatch:screen&&screen.fields.length!==rows.length,
+    items,
+  };
+  renderOcrModal();
+}
+
+function renderOcrModal(){
+  const root=document.getElementById('ocrModalRoot');
+  if(!ocrReview||!ocrTarget){ root.innerHTML=''; return; }
+  const e=ENEMIES[ocrTarget.ei];
+  const rows=ocrReview.items.map((it,i)=>`
+    <tr>
+      <td style="padding:3px 6px;text-align:left;white-space:nowrap">${it.label}</td>
+      <td style="padding:3px 6px"><input type="number" step="0.01" value="${it.left??''}" style="width:80px"
+        onchange="ocrReview.items[${i}].left=this.value===''?null:parseFloat(this.value)"></td>
+      <td style="padding:3px 6px"><input type="number" step="0.01" value="${it.right??''}" style="width:80px"
+        onchange="ocrReview.items[${i}].right=this.value===''?null:parseFloat(this.value)"></td>
+    </tr>`).join('');
+  root.innerHTML=`
+  <div class="modal-overlay">
+    <div class="modal" style="max-width:440px">
+      <h3>Scanned: ${ocrReview.screenName}</h3>
+      <p>${ocrReview.mismatch?'⚠ Row count doesn\'t match the expected field count for this screen — double-check before applying. ':''}Review the extracted values, then apply.</p>
+      <div style="max-height:320px;overflow:auto;margin-bottom:10px">
+        <table style="width:100%;font-size:12px;border-collapse:collapse">
+          <tr style="color:var(--muted);font-size:10px;text-transform:uppercase">
+            <th style="text-align:left;padding:3px 6px">Field</th><th style="padding:3px 6px">Left (you)</th><th style="padding:3px 6px">Right (${e.name||'opponent'})</th>
+          </tr>
+          ${rows}
+        </table>
+      </div>
+      <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-bottom:6px"><input type="checkbox" id="ocrApplyLeft" checked> Update jackclown (left column)</label>
+      <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-bottom:10px"><input type="checkbox" id="ocrApplyRight" checked> Update ${e.name||'opponent'} (right column)</label>
+      <div style="display:flex;gap:8px">
+        <button class="btn" style="flex:1" onclick="cancelOcrReview()">Cancel</button>
+        <button class="btn" style="flex:1;background:var(--accent);color:#000;border-color:var(--accent)" onclick="applyOcrReview()">Apply</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function cancelOcrReview(){
+  ocrReview=null; ocrTarget=null;
+  document.getElementById('ocrModalRoot').innerHTML='';
+}
+
+function applyOcrReview(){
+  const applyLeft=document.getElementById('ocrApplyLeft').checked;
+  const applyRight=document.getElementById('ocrApplyRight').checked;
+  const atk=ATK_DB[currentAtk];
+  const e=ENEMIES[ocrTarget.ei];
+  ocrReview.items.forEach(it=>{
+    if(it.key.startsWith('row')) return; // unrecognized screen — nothing to map to
+    if(applyLeft && it.left!=null && !isNaN(it.left)) atk[it.key]=it.left;
+    if(applyRight && it.right!=null && !isNaN(it.right)) e[it.key]=it.right;
+  });
+  cancelOcrReview();
+  buildAtkPanel();
+  render();
+  scheduleWrite();
+}
+
 function buildExpandRow(ei){
   const e=ENEMIES[ei];
   const grid=ENEMY_FIELDS.map(([k,lbl])=>`<div class="sf">
@@ -887,6 +1033,11 @@ function buildExpandRow(ei){
         <input type="number" value="${e.bp??''}" placeholder="0" step="1"
           oninput="ENEMIES[${ei}].bp=parseFloat(this.value)||0;scheduleWrite();"
           onchange="render();">
+      </div>
+      <div class="sf" style="flex:0 0 190px">
+        <label title="Drop one Attributes Comparison screenshot at a time — scans both columns">📷 Scan Screenshot</label>
+        <input type="file" accept="image/*" onchange="handleOcrFile(this.files[0],${ei})">
+        <div id="ocrStatus-${ei}" style="font-size:10px;color:var(--muted);margin-top:2px"></div>
       </div>
     </div>`;
 
