@@ -57,4 +57,5 @@ Single HTML file (`index.html`) deployed to GitHub Pages.
 - `currentWeek`: defaults to last entry in WEEKS
 - `WEEKS_SEED[weekId]`: array of enemy objects for that week, deep-cloned on week switch
 - Week ID format: `wf` + `MMDDYY` (e.g. `wf072626` = Jul 26 2026)
-- After editing `index.html`, copy to `../wf_calc.html` then commit + push from the `wf-dmg-calc/` git repo
+- After editing `index.html`, commit + push from this repo — GitHub Pages serves `index.html` directly, live at https://aipeursson.github.io/wingfighter-dmg-calc/
+- (Repo was renamed from `wf-dmg-calc` to `wingfighter-dmg-calc` and moved here from `C:\Users\Gary\Downloads\WF 071926-20260719T103551Z-1-001\wf-dmg-calc`; the old `../wf_calc.html` sibling-copy step from that location no longer applies)
