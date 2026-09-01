@@ -1271,8 +1271,8 @@ function render(){
 
     const muRatio=myKillRate&&theirKillRate?myKillRate/theirKillRate:null;
     const muClass=muRatio?(muRatio>1.25?'mu-win':muRatio>0.8?'mu-even':'mu-loss'):'';
-    html+=`<tr class="${muClass}">
-      <td class="name-cell" onclick="toggleExpand(${ei})">${expanded?'▼ ':'▶ '}${e.label?`<span style="color:var(--accent);font-size:10px;margin-right:4px">${e.label}</span>`:''}${e.name}</td>
+    html+=`<tr class="${muClass}" style="cursor:pointer" onclick="toggleExpand(${ei})">
+      <td class="name-cell">${expanded?'▼ ':'▶ '}${e.label?`<span style="color:var(--accent);font-size:10px;margin-right:4px">${e.label}</span>`:''}${e.name}</td>
       <td style="color:var(--muted)">${(e.bp/1e6).toFixed(2)}M</td>
       <td class="${colorH(hit)}">${hit.toFixed(1)}%</td>
       <td class="${colorH(cp)}">${cp.toFixed(1)}%</td>
@@ -1289,7 +1289,7 @@ function render(){
       </td>
       ${myTTKcell}
       ${theirTTKcell}
-      <td style="text-align:center"><button class="btn" onclick="runSim(${ei})" title="Monte Carlo simulation">▶</button></td>
+      <td style="text-align:center"><button class="btn" onclick="event.stopPropagation();runSim(${ei})" title="Monte Carlo simulation">▶</button></td>
     </tr>`;
     if(expanded) html+=buildExpandRow(ei);
   }
