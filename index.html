@@ -159,6 +159,7 @@ tr.mu-loss>td:first-child{border-left:3px solid var(--red);}
   <span id="syncMsg">Connecting…</span>
   <span id="nicknameDisplay"></span>
   <button class="btn" onclick="promptNickname()" style="margin-left:4px">✏ Name</button>
+  <span style="color:var(--muted);margin-left:auto">📷 Drag screenshots anywhere on this page to scan them</span>
 </div>
 
 <div id="cfgWarn" class="cfg-warn" style="display:none">
@@ -896,28 +897,32 @@ function detectScreen(rows){
   return SCREEN_DEFS.find(s=>s.fields.length===rows.length)||null;
 }
 
-let ocrTarget=null, ocrReview=null;
+let ocrTarget=null, ocrReview=null; // ocrTarget: {ei} once resolved to a real enemy row, or null while pending a manual pick (global drop)
 
 function ocrStatusEl(ei){ return document.getElementById(`ocrStatus-${ei}`); }
 
+function makeBlankEnemy(name,bp){
+  return {
+    name:name||'New opponent', bp:bp||0, label:null,
+    drones:[{name:'',type:'elec',level:0},{name:'',type:'reflect',level:0},{name:'',type:'burn',level:0}],
+  };
+}
+
 // Runs OCR on every dropped file in sequence, merges every field it could
-// recognize into one review (later screens win on duplicate fields — e.g. if
+// recognize into one result (later screens win on duplicate fields — e.g. if
 // the same screen gets scanned twice), and reports any file it couldn't parse.
-async function handleOcrFiles(fileList, ei){
-  const files=Array.from(fileList||[]);
-  if(!files.length) return;
-  ocrTarget={ei};
-  const statusEl=ocrStatusEl(ei);
+// statusFn(text) is called with progress updates if provided.
+async function ocrProcessFiles(files, statusFn){
   const byKey=new Map(); // key -> {key,label,left,right,screenId}
   const screensSeen=new Set();
   const problems=[];
   for(let i=0;i<files.length;i++){
     const file=files[i];
     const prefix=files.length>1?`[${i+1}/${files.length}] ${file.name}: `:'';
-    if(statusEl){ statusEl.style.color='var(--muted)'; statusEl.textContent=prefix+'reading…'; }
+    if(statusFn) statusFn(prefix+'reading…');
     try{
       const {data:{text}}=await Tesseract.recognize(file,'eng',{
-        logger:m=>{ if(statusEl&&m.status) statusEl.textContent=`${prefix}${m.status} ${Math.round((m.progress||0)*100)}%`; }
+        logger:m=>{ if(statusFn&&m.status) statusFn(`${prefix}${m.status} ${Math.round((m.progress||0)*100)}%`); }
       });
       const rows=ocrParseLines(text);
       if(!rows.length){ problems.push(`${file.name}: no stat rows recognized`); continue; }
@@ -933,27 +938,113 @@ async function handleOcrFiles(fileList, ei){
       problems.push(`${file.name}: OCR failed — ${err.message}`);
     }
   }
+  const items=[...byKey.values()].sort((a,b)=>a.screenId-b.screenId);
+  const screenList=[...screensSeen].sort((a,b)=>a-b).join(', ');
+  const parsedCount=files.length-problems.filter(p=>!p.includes('check values')).length;
+  const screenName=files.length>1
+    ?`${items.length} field(s) from Screen(s) ${screenList||'none'} (${parsedCount}/${files.length} files parsed)`
+    :screenList?`Screen ${screenList} of 9`:'Unrecognized screenshot';
+  return {items,problems,screenName};
+}
+
+// Entry point from an already-expanded enemy row's own file input.
+async function handleOcrFiles(fileList, ei){
+  const files=Array.from(fileList||[]);
+  if(!files.length) return;
+  const statusEl=ocrStatusEl(ei);
+  if(statusEl) statusEl.style.color='var(--muted)';
+  const result=await ocrProcessFiles(files, txt=>{ if(statusEl) statusEl.textContent=txt; });
   if(statusEl) statusEl.textContent='';
-  if(!byKey.size){
+  if(!result.items.length){
     if(statusEl){ statusEl.style.color='var(--red)'; statusEl.textContent='No recognizable stat rows found in '+(files.length>1?'any file.':'that file.'); }
     return;
   }
-  const items=[...byKey.values()].sort((a,b)=>a.screenId-b.screenId);
-  const screenList=[...screensSeen].sort((a,b)=>a-b).join(', ');
-  ocrReview={
-    screenName:files.length>1
-      ?`${items.length} field(s) from Screen(s) ${screenList} (${files.length-problems.filter(p=>!p.includes('check values')).length}/${files.length} files parsed)`
-      :`Screen ${screenList} of 9`,
-    problems,
-    items,
-  };
+  ocrTarget={ei};
+  ocrReview=result;
   renderOcrModal();
 }
 
+// Global drop-anywhere entry point — opponent isn't known yet (the screenshot's
+// own name/BP text doesn't OCR reliably enough to auto-match), so the review
+// modal asks the user to pick or create the opponent before applying.
+async function handleGlobalOcrFiles(fileList){
+  const files=Array.from(fileList||[]).filter(f=>f.type.startsWith('image/'));
+  if(!files.length) return;
+  ocrTarget=null;
+  showOcrDropStatus(`Scanning ${files.length} screenshot(s)…`);
+  const result=await ocrProcessFiles(files, txt=>showOcrDropStatus(txt));
+  hideOcrDropStatus();
+  if(!result.items.length){
+    showOcrDropStatus('No recognizable stat rows found in '+(files.length>1?'any file.':'that file.'),true);
+    setTimeout(hideOcrDropStatus,4000);
+    return;
+  }
+  ocrReview=result;
+  renderOcrModal();
+}
+
+function showOcrDropStatus(text,isErr){
+  let el=document.getElementById('ocrDropStatus');
+  if(!el){
+    el=document.createElement('div');
+    el.id='ocrDropStatus';
+    el.style.cssText='position:fixed;bottom:16px;right:16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:12px;z-index:200;box-shadow:0 4px 16px rgba(0,0,0,.4)';
+    document.body.appendChild(el);
+  }
+  el.style.color=isErr?'var(--red)':'var(--muted)';
+  el.textContent=text;
+}
+function hideOcrDropStatus(){ const el=document.getElementById('ocrDropStatus'); if(el) el.remove(); }
+
+// Global drag-and-drop: drop image files anywhere on the page to scan them,
+// no need to expand an enemy row first. Which opponent they apply to is
+// chosen in the review modal instead.
+(function initGlobalOcrDropZone(){
+  let dragDepth=0;
+  function overlayEl(){
+    let el=document.getElementById('ocrDropOverlay');
+    if(!el){
+      el=document.createElement('div');
+      el.id='ocrDropOverlay';
+      el.style.cssText='position:fixed;inset:0;background:rgba(88,166,255,.12);border:3px dashed var(--accent);z-index:150;display:none;align-items:center;justify-content:center;pointer-events:none;';
+      el.innerHTML='<div style="background:var(--bg2);border:1px solid var(--accent);border-radius:10px;padding:16px 24px;font-size:14px;font-weight:600;color:var(--accent)">📷 Drop screenshots to scan</div>';
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  window.addEventListener('dragenter',e=>{
+    if(!e.dataTransfer||![...e.dataTransfer.types].includes('Files')) return;
+    dragDepth++;
+    overlayEl().style.display='flex';
+  });
+  window.addEventListener('dragover',e=>{
+    if(!e.dataTransfer||![...e.dataTransfer.types].includes('Files')) return;
+    e.preventDefault();
+  });
+  window.addEventListener('dragleave',()=>{
+    dragDepth=Math.max(0,dragDepth-1);
+    if(dragDepth===0) overlayEl().style.display='none';
+  });
+  window.addEventListener('drop',e=>{
+    if(!e.dataTransfer||![...e.dataTransfer.types].includes('Files')) return;
+    e.preventDefault();
+    dragDepth=0;
+    overlayEl().style.display='none';
+    handleGlobalOcrFiles(e.dataTransfer.files);
+  });
+})();
+
 function renderOcrModal(){
   const root=document.getElementById('ocrModalRoot');
-  if(!ocrReview||!ocrTarget){ root.innerHTML=''; return; }
-  const e=ENEMIES[ocrTarget.ei];
+  if(!ocrReview){ root.innerHTML=''; return; }
+  // ocrTarget resolved (came from an enemy row's own scan button) vs pending
+  // (came from the global drop zone — opponent needs to be picked here).
+  const existingPickerEl=document.getElementById('ocrOpponentPicker');
+  const pickerVal=ocrTarget?String(ocrTarget.ei):(existingPickerEl?existingPickerEl.value:'new');
+  const isNewOpp=!ocrTarget&&pickerVal==='new';
+  const displayName=ocrTarget?(ENEMIES[ocrTarget.ei].name||'opponent')
+    :isNewOpp?'new opponent':(ENEMIES[+pickerVal]?.name||'opponent');
+
   const rows=ocrReview.items.map((it,i)=>`
     <tr>
       <td style="padding:3px 6px;text-align:left;white-space:nowrap">${it.label}</td>
@@ -966,22 +1057,35 @@ function renderOcrModal(){
     ?`<div style="background:#2d1a00;border:1px solid var(--yellow);color:var(--yellow);border-radius:6px;padding:6px 8px;margin-bottom:8px;font-size:11px">
         ${ocrReview.problems.map(p=>`⚠ ${p}`).join('<br>')}
       </div>`:'';
+  const opponentPickerHtml=ocrTarget?'':`
+    <div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">The screenshot's name/BP can't be read reliably — pick who this is for:</label>
+      <select id="ocrOpponentPicker" onchange="renderOcrModal()" style="width:100%;margin-bottom:6px">
+        <option value="new"${isNewOpp?' selected':''}>+ New opponent</option>
+        ${ENEMIES.map((en,idx)=>`<option value="${idx}"${String(idx)===pickerVal?' selected':''}>${en.name||'(unnamed)'}${en.bp?' — '+(en.bp/1e6).toFixed(2)+'M':''}</option>`).join('')}
+      </select>
+      ${isNewOpp?`<div style="display:flex;gap:6px">
+        <input id="ocrNewOppName" placeholder="Opponent name" style="flex:1">
+        <input id="ocrNewOppBp" type="number" placeholder="BP" style="flex:0 0 110px">
+      </div>`:''}
+    </div>`;
   root.innerHTML=`
   <div class="modal-overlay">
     <div class="modal" style="max-width:460px">
       <h3>Scanned: ${ocrReview.screenName}</h3>
       <p>Review the extracted values, then apply.</p>
       ${problemsHtml}
+      ${opponentPickerHtml}
       <div style="max-height:320px;overflow:auto;margin-bottom:10px">
         <table style="width:100%;font-size:12px;border-collapse:collapse">
           <tr style="color:var(--muted);font-size:10px;text-transform:uppercase">
-            <th style="text-align:left;padding:3px 6px">Field</th><th style="padding:3px 6px">Left (you)</th><th style="padding:3px 6px">Right (${e.name||'opponent'})</th>
+            <th style="text-align:left;padding:3px 6px">Field</th><th style="padding:3px 6px">Left (you)</th><th style="padding:3px 6px">Right (${displayName})</th>
           </tr>
           ${rows}
         </table>
       </div>
       <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-bottom:6px"><input type="checkbox" id="ocrApplyLeft" checked> Update jackclown (left column)</label>
-      <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-bottom:10px"><input type="checkbox" id="ocrApplyRight" checked> Update ${e.name||'opponent'} (right column)</label>
+      <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-bottom:10px"><input type="checkbox" id="ocrApplyRight" checked> Update ${displayName} (right column)</label>
       <div style="display:flex;gap:8px">
         <button class="btn" style="flex:1" onclick="cancelOcrReview()">Cancel</button>
         <button class="btn" style="flex:1;background:var(--accent);color:#000;border-color:var(--accent)" onclick="applyOcrReview()">Apply</button>
@@ -999,9 +1103,22 @@ function applyOcrReview(){
   const applyLeft=document.getElementById('ocrApplyLeft').checked;
   const applyRight=document.getElementById('ocrApplyRight').checked;
   const atk=ATK_DB[currentAtk];
-  const e=ENEMIES[ocrTarget.ei];
+  let ei;
+  if(ocrTarget){
+    ei=ocrTarget.ei;
+  }else{
+    const pickerVal=document.getElementById('ocrOpponentPicker').value;
+    if(pickerVal==='new'){
+      const name=(document.getElementById('ocrNewOppName')?.value||'').trim();
+      const bp=parseFloat(document.getElementById('ocrNewOppBp')?.value)||0;
+      ENEMIES.push(makeBlankEnemy(name,bp));
+      ei=ENEMIES.length-1;
+    }else{
+      ei=+pickerVal;
+    }
+  }
+  const e=ENEMIES[ei];
   ocrReview.items.forEach(it=>{
-    if(it.key.startsWith('row')) return; // unrecognized screen — nothing to map to
     if(applyLeft && it.left!=null && !isNaN(it.left)) atk[it.key]=it.left;
     if(applyRight && it.right!=null && !isNaN(it.right)) e[it.key]=it.right;
   });
